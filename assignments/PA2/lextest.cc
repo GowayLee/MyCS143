@@ -24,6 +24,11 @@
 //  of the current line read from the input.
 //
 int curr_lineno = 1;
+
+// User customize
+// The lexer keeps this global variable up to date with the column number
+int curr_columnno = 0;
+
 char *curr_filename = "<stdin>"; // this name is arbitrary
 FILE *fin;   // This is the file pointer from which the lexer reads its input.
 
@@ -53,9 +58,9 @@ void handle_flags(int argc, char *argv[]);
 int  cool_yydebug;
 
 // defined in utilities.cc
-extern void dump_cool_token(ostream& out, int lineno, 
-			    int token, YYSTYPE yylval);
-
+// extern void dump_cool_token(ostream& out, int lineno, 
+// 			    int token, YYSTYPE yylval);
+extern void dump_cool_token(ostream& out, int lineno, int cloumnno, int token, YYSTYPE yylval);
 
 int main(int argc, char** argv) {
 	int token;
@@ -79,7 +84,9 @@ int main(int argc, char** argv) {
 	    //
 	    cout << "#name \"" << argv[optind] << "\"" << endl;
 	    while ((token = cool_yylex()) != 0) {
-		dump_cool_token(cout, curr_lineno, token, cool_yylval);
+		// dump_cool_token(cout, curr_lineno, token, cool_yylval);
+	    // }
+		dump_cool_token(cout, curr_lineno, curr_columnno, token, cool_yylval);
 	    }
 	    fclose(fin);
 	    optind++;

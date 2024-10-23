@@ -3,6 +3,7 @@ ASSN = 2
 CLASS= cs143
 CLASSDIR= ../..
 LIB= -lfl
+LIBDIR = /usr/lib
 
 SRC= cool.flex test.cl README 
 CSRC= lextest.cc utilities.cc stringtab.cc handle_flags.cc
@@ -36,7 +37,7 @@ ${OUTPUT}:	lexer test.cl
 	-./lexer test.cl >test.output 2>&1 
 
 lexer: ${OBJS}
-	${CC} ${CFLAGS} ${OBJS} ${LIB} -o lexer
+	${CC} ${CFLAGS} ${OBJS} -L ${LIBDIR} ${LIB} -o lexer
 
 .cc.o:
 	${CC} ${CFLAGS} -c $<
