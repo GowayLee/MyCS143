@@ -1,3 +1,7 @@
 .vscode/
 
 *.dev.*
+*.o
+*.exe
+
+cool-lex.cc
