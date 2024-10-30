@@ -3,5 +3,7 @@
 *.dev.*
 *.o
 *.exe
+*.swp
 
 cool-lex.cc
+

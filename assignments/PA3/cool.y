@@ -14,20 +14,19 @@
   
   /* Locations */
   #define YYLTYPE int              /* the type of locations */
-  #define cool_yylloc curr_lineno  /* use the curr_lineno from the lexer
-  for the location of tokens */
+  #define cool_yylloc curr_lineno  /* use the curr_lineno from the lexer for the location of tokens */
     
-    extern int node_lineno;          /* set before constructing a tree node
+  extern int node_lineno;          /* set before constructing a tree node
     to whatever you want the line number
     for the tree node to be */
       
       
-      #define YYLLOC_DEFAULT(Current, Rhs, N)         \
-      Current = Rhs[1];                             \
-      node_lineno = Current;
+  #define YYLLOC_DEFAULT(Current, Rhs, N)         \
+    Current = Rhs[1];                             \
+    node_lineno = Current;
     
     
-    #define SET_NODELOC(Current)  \
+  #define SET_NODELOC(Current)  \
     node_lineno = Current;
     
     /* IMPORTANT NOTE ON LINE NUMBERS
@@ -81,35 +80,35 @@
     /*                DONT CHANGE ANYTHING IN THIS SECTION                  */
     
     Program ast_root;	      /* the result of the parse  */
-    Classes parse_results;        /* for use in semantic analysis */
+    classes parse_results;        /* for use in semantic analysis */
     int omerrs = 0;               /* number of errors in lexing and parsing */
     %}
     
-    /* A union of all the types that can be the result of parsing actions. */
+    /* a union of all the types that can be the result of parsing actions. */
     %union {
-      Boolean boolean;
-      Symbol symbol;
-      Program program;
-      Class_ class_;
-      Classes classes;
-      Feature feature;
-      Features features;
-      Formal formal;
-      Formals formals;
-      Case case_;
-      Cases cases;
-      Expression expression;
-      Expressions expressions;
+      boolean boolean;
+      symbol symbol;
+      program program;
+      class_ class_;
+      classes classes;
+      feature feature;
+      features features;
+      formal formal;
+      formals formals;
+      case case_;
+      cases cases;
+      expression expression;
+      expressions expressions;
       char *error_msg;
     }
     
     /* 
-    Declare the terminals; a few have types for associated lexemes.
-    The token ERROR is never used in the parser; thus, it is a parse
+    declare the terminals; a few have types for associated lexemes.
+    the token error is never used in the parser; thus, it is a parse
     error when the lexer returns it.
     
-    The integer following token declaration is the numeric constant used
-    to represent that token internally.  Typically, Bison generates these
+    the integer following token declaration is the numeric constant used
+    to represent that token internally.  typically, bison generates these
     on its own, but we give explicit numbers to prevent version parity
     problems (bison 1.25 and earlier start at 258, later versions -- at
     257)
@@ -122,21 +121,25 @@
     %token <symbol>  TYPEID 278 OBJECTID 279 
     %token ASSIGN 280 NOT 281 LE 282 ERROR 283
     
-    /*  DON'T CHANGE ANYTHING ABOVE THIS LINE, OR YOUR PARSER WONT WORK       */
+    /*  don't change anything above this line, or your parser wont work       */
     /**************************************************************************/
     
-    /* Complete the nonterminal list below, giving a type for the semantic
-    value of each non terminal. (See section 3.6 in the bison 
+    /* complete the nonterminal list below, giving a type for the semantic
+    value of each non terminal. (see section 3.6 in the bison 
     documentation for details). */
     
-    /* Declare types for the grammar's non-terminals. */
+    /* declare types for the grammar's non-terminals. */
     %type <program> program
     %type <classes> class_list
     %type <class_> class
+    %type <feature> feature
+    %type <formal> formal
+    %type <expression> expression
     
-    /* You will want to change the following line. */
-    %type <features> dummy_feature_list
-    
+    /* you will want to change the following line. */
+    %type <features> dummy_feature_list 
+    %type <formals> dummy_formal_list 
+    %type <expressions> dummy_expression_list 
     /* Precedence declarations go here. */
     
     
@@ -145,30 +148,91 @@
     Save the root of the abstract syntax tree in a global variable.
     */
     program	: class_list	{ @$ = @1; ast_root = program($1); }
-    ;
+            ;
     
-    class_list
-    : class			/* single class */
-    { $$ = single_Classes($1);
-    parse_results = $$; }
-    | class_list class	/* several classes */
-    { $$ = append_Classes($1,single_Classes($2)); 
-    parse_results = $$; }
-    ;
+    class_list : class			/* single class */
+               { 
+                 $$ = single_Classes($1);
+                 parse_results = $$; 
+               }
+               | class_list class	/* several classes */
+               { 
+                 $$ = append_Classes($1, single_Classes($2)); 
+                 parse_results = $$; 
+               }
+               ;
     
     /* If no parent is specified, the class inherits from the Object class. */
     class	: CLASS TYPEID '{' dummy_feature_list '}' ';'
-    { $$ = class_($2,idtable.add_string("Object"),$4,
-    stringtable.add_string(curr_filename)); }
-    | CLASS TYPEID INHERITS TYPEID '{' dummy_feature_list '}' ';'
-    { $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
-    ;
+          { 
+            $$ = class_($2,idtable.add_string("Object"), $4, string(curr_filename)); 
+          }
+          | CLASS TYPEID INHERITS TYPEID '{' dummy_feature_list '}' ';'
+          { 
+            $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); 
+          }
+          ;
+   
+    feature : OBJECTID '(' dummy_formal_list ')' ':' TYPEID '{' expression '}'
+            {
+              $$ = method($1, $3, $6, $8);
+            }
+            | OBJECTID ':' TYPEID '{' expression '}'
+            {
+              $$ = method($1, nil_Formals(), $3, $5);
+            }
+            | OBJECTID ':' TYPEID ASSIGN expression
+            {
+              $$ = attr($1, $3, $5);
+            }
+            | OBJECTID ':' TYPEID
+            {
+              $$ = attr($1, $3, nil_Expressions());
+            }
+            ;
+
+    formal : OBJECTID ':' TYPEID
+           {
+             $$ = formal($1, $3);
+           }
+           ;
     
+
+
+    ///////////////////////////////////////////////////////////////////
+    ////  Dummy_lists
+    ///////////////////////////////////////////////////////////////////
+
     /* Feature list may be empty, but no empty features in list. */
-    dummy_feature_list:		/* empty */
-    {  $$ = nil_Features(); }
+    dummy_feature_list: /* empty */
+                      {  
+                        $$ = nil_Features(); 
+                      }
+                      | dummy_feature_list feature ';'
+                      {
+                        $$ = append_Features($1, single_Features($2));
+                      }
+                      ;
     
-    
+    /* There is such situation that a formal list can be empty. */
+    dummy_formal_list : dummy_formal_list ',' formal
+                      {
+                        $$ = append_Formals($1, single_Formals($3));
+                      }
+                      | formal
+                      {
+                        $$ = single_Formals($1);
+                      }
+
+    dummy_expression_list: /* empty */
+                      {  
+                        $$ = nil_Expressions(); 
+                      }
+                      | dummy_expression_list ',' expression
+                      {
+                        $$ = append_Expressions($1, single_Expressions($3));
+                      }
+
     /* end of grammar */
     %%
     
