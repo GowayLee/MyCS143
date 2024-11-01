@@ -2,8 +2,8 @@
 
 *.dev.*
 *.o
-*.exe
 *.swp
+*.output
 
 cool-lex.cc
 

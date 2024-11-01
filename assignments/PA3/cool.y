@@ -1,7 +1,6 @@
 /*
 *  cool.y
 *              Parser definition for the COOL language.
-*
 */
 %{
   #include <iostream>
@@ -29,225 +28,406 @@
   #define SET_NODELOC(Current)  \
     node_lineno = Current;
     
-    /* IMPORTANT NOTE ON LINE NUMBERS
-    *********************************
-    * The above definitions and macros cause every terminal in your grammar to 
-    * have the line number supplied by the lexer. The only task you have to
-    * implement for line numbers to work correctly, is to use SET_NODELOC()
-    * before constructing any constructs from non-terminals in your grammar.
-    * Example: Consider you are matching on the following very restrictive 
-    * (fictional) construct that matches a plus between two integer constants. 
-    * (SUCH A RULE SHOULD NOT BE  PART OF YOUR PARSER):
+  /* IMPORTANT NOTE ON LINE NUMBERS
+  *********************************
+  * The above definitions and macros cause every terminal in your grammar to 
+  * have the line number supplied by the lexer. The only task you have to
+  * implement for line numbers to work correctly, is to use SET_NODELOC()
+  * before constructing any constructs from non-terminals in your grammar.
+  * Example: Consider you are matching on the following very restrictive 
+  * (fictional) construct that matches a plus between two integer constants. 
+  * (SUCH A RULE SHOULD NOT BE  PART OF YOUR PARSER):
     
-    plus_consts	: INT_CONST '+' INT_CONST 
+  plus_consts	: INT_CONST '+' INT_CONST 
     
-    * where INT_CONST is a terminal for an integer constant. Now, a correct
-    * action for this rule that attaches the correct line number to plus_const
-    * would look like the following:
+  * where INT_CONST is a terminal for an integer constant. Now, a correct
+  * action for this rule that attaches the correct line number to plus_const
+  * would look like the following:
     
-    plus_consts	: INT_CONST '+' INT_CONST 
-    {
-      // Set the line number of the current non-terminal:
-      // ***********************************************
-      // You can access the line numbers of the i'th item with @i, just
-      // like you acess the value of the i'th exporession with $i.
-      //
-      // Here, we choose the line number of the last INT_CONST (@3) as the
-      // line number of the resulting expression (@$). You are free to pick
-      // any reasonable line as the line number of non-terminals. If you 
-      // omit the statement @$=..., bison has default rules for deciding which 
-      // line number to use. Check the manual for details if you are interested.
-      @$ = @3;
+  plus_consts	: INT_CONST '+' INT_CONST 
+  {
+    // Set the line number of the current non-terminal:
+    // ***********************************************
+    // You can access the line numbers of the i'th item with @i, just
+    // like you acess the value of the i'th exporession with $i.
+    //
+    // Here, we choose the line number of the last INT_CONST (@3) as the
+    // line number of the resulting expression (@$). You are free to pick
+    // any reasonable line as the line number of non-terminals. If you 
+    // omit the statement @$=..., bison has default rules for deciding which 
+    // line number to use. Check the manual for details if you are interested.
+    @$ = @3;
       
       
-      // Observe that we call SET_NODELOC(@3); this will set the global variable
-      // node_lineno to @3. Since the constructor call "plus" uses the value of 
-      // this global, the plus node will now have the correct line number.
-      SET_NODELOC(@3);
+    // Observe that we call SET_NODELOC(@3); this will set the global variable
+    // node_lineno to @3. Since the constructor call "plus" uses the value of 
+    // this global, the plus node will now have the correct line number.
+    SET_NODELOC(@3);
       
-      // construct the result node:
-      $$ = plus(int_const($1), int_const($3));
-    }
+    // construct the result node:
+    $$ = plus(int_const($1), int_const($3));
+  }
     
-    */
-    
-    
-    
-    void yyerror(char *s);        /*  defined below; called for each parse error */
-    extern int yylex();           /*  the entry point to the lexer  */
-    
-    /************************************************************************/
-    /*                DONT CHANGE ANYTHING IN THIS SECTION                  */
-    
-    Program ast_root;	      /* the result of the parse  */
-    classes parse_results;        /* for use in semantic analysis */
-    int omerrs = 0;               /* number of errors in lexing and parsing */
-    %}
-    
-    /* a union of all the types that can be the result of parsing actions. */
-    %union {
-      boolean boolean;
-      symbol symbol;
-      program program;
-      class_ class_;
-      classes classes;
-      feature feature;
-      features features;
-      formal formal;
-      formals formals;
-      case case_;
-      cases cases;
-      expression expression;
-      expressions expressions;
-      char *error_msg;
-    }
-    
-    /* 
-    declare the terminals; a few have types for associated lexemes.
-    the token error is never used in the parser; thus, it is a parse
-    error when the lexer returns it.
-    
-    the integer following token declaration is the numeric constant used
-    to represent that token internally.  typically, bison generates these
-    on its own, but we give explicit numbers to prevent version parity
-    problems (bison 1.25 and earlier start at 258, later versions -- at
-    257)
-    */
-    %token CLASS 258 ELSE 259 FI 260 IF 261 IN 262 
-    %token INHERITS 263 LET 264 LOOP 265 POOL 266 THEN 267 WHILE 268
-    %token CASE 269 ESAC 270 OF 271 DARROW 272 NEW 273 ISVOID 274
-    %token <symbol>  STR_CONST 275 INT_CONST 276 
-    %token <boolean> BOOL_CONST 277
-    %token <symbol>  TYPEID 278 OBJECTID 279 
-    %token ASSIGN 280 NOT 281 LE 282 ERROR 283
-    
-    /*  don't change anything above this line, or your parser wont work       */
-    /**************************************************************************/
-    
-    /* complete the nonterminal list below, giving a type for the semantic
-    value of each non terminal. (see section 3.6 in the bison 
-    documentation for details). */
-    
-    /* declare types for the grammar's non-terminals. */
-    %type <program> program
-    %type <classes> class_list
-    %type <class_> class
-    %type <feature> feature
-    %type <formal> formal
-    %type <expression> expression
-    
-    /* you will want to change the following line. */
-    %type <features> dummy_feature_list 
-    %type <formals> dummy_formal_list 
-    %type <expressions> dummy_expression_list 
-    /* Precedence declarations go here. */
+  */
     
     
-    %%
-    /* 
-    Save the root of the abstract syntax tree in a global variable.
-    */
-    program	: class_list	{ @$ = @1; ast_root = program($1); }
-            ;
     
-    class_list : class			/* single class */
-               { 
-                 $$ = single_Classes($1);
-                 parse_results = $$; 
-               }
-               | class_list class	/* several classes */
-               { 
-                 $$ = append_Classes($1, single_Classes($2)); 
-                 parse_results = $$; 
-               }
-               ;
+  void yyerror(char *s);        /*  defined below; called for each parse error */
+  extern int yylex();           /*  the entry point to the lexer  */
     
-    /* If no parent is specified, the class inherits from the Object class. */
-    class	: CLASS TYPEID '{' dummy_feature_list '}' ';'
-          { 
-            $$ = class_($2,idtable.add_string("Object"), $4, string(curr_filename)); 
-          }
-          | CLASS TYPEID INHERITS TYPEID '{' dummy_feature_list '}' ';'
-          { 
-            $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); 
-          }
-          ;
+  /************************************************************************/
+  /*                DONT CHANGE ANYTHING IN THIS SECTION                  */
+    
+  Program ast_root;	      /* the result of the parse  */
+  Classes parse_results;        /* for use in semantic analysis */
+  int omerrs = 0;               /* number of errors in lexing and parsing */
+%}
+    
+/* a union of all the types that can be the result of parsing actions. */
+%union {
+  Boolean boolean;
+  Symbol symbol;
+  Program program;
+  Class_ class_;
+  Classes classes;
+  Feature feature;
+  Features features;
+  Formal formal;
+  Formals formals;
+  Case case_;
+  Cases cases;
+  Expression expression;
+  Expressions expressions;
+  char *error_msg;
+}
+    
+/* 
+declare the terminals; a few have types for associated lexemes.
+the token error is never used in the parser; thus, it is a parse
+error when the lexer returns it.
+    
+the integer following token declaration is the numeric constant used
+to represent that token internally.  typically, bison generates these
+on its own, but we give explicit numbers to prevent version parity
+problems (bison 1.25 and earlier start at 258, later versions -- at
+257)
+*/
+%token CLASS 258 ELSE 259 FI 260 IF 261 IN 262 
+%token INHERITS 263 LET 264 LOOP 265 POOL 266 THEN 267 WHILE 268
+%token CASE 269 ESAC 270 OF 271 DARROW 272 NEW 273 ISVOID 274
+%token <symbol>  STR_CONST 275 INT_CONST 276 
+%token <boolean> BOOL_CONST 277
+%token <symbol>  TYPEID 278 OBJECTID 279 
+%token ASSIGN 280 NOT 281 LE 282 ERROR 283
+    
+/*  don't change anything above this line, or your parser wont work       */
+/**************************************************************************/
+    
+/* complete the nonterminal list below, giving a type for the semantic
+value of each non terminal. (see section 3.6 in the bison 
+documentation for details). */
+    
+/* declare types for the grammar's non-terminals. */
+%type <program> program
+%type <class_> class
+%type <feature> feature
+%type <formal> formal
+%type <expression> expression
+%type <expression> dummy_let_expression
+
+/* you will want to change the following line. */
+%type <features> dummy_feature_list 
+%type <formals> dummy_formal_list 
+%type <expressions> dummy_expression_list dummy_block_expression_list
+%type <classes> dummy_class_list
+%type <cases> dummy_case_list
+
+/* Precedence declarations go here. */
+%right EXTEND_LET_EXPR
+%right ASSIGN
+%right NOT
+%nonassoc LE '<' '='
+%left '+' '-'
+%left '*' '/'
+%left ISVOID
+%left '~'
+%left '@'
+%left '.'   
+    
+%%
+/* 
+Save the root of the abstract syntax tree in a global variable.
+*/
+program	: dummy_class_list	{ @$ = @1; ast_root = program($1); }
+        ;
+
+dummy_class_list  : class
+                  { 
+                    $$ = single_Classes($1);
+                    parse_results = $$; 
+                  }
+                  | dummy_class_list class	/* several classes */
+                  { 
+                    $$ = append_Classes($1, single_Classes($2)); 
+                    parse_results = $$; 
+                  }
+                  ;
+    
+/* If no parent is specified, the class inherits from the Object class. */
+class	: CLASS TYPEID '{' dummy_feature_list '}' ';'
+      { 
+        $$ = class_($2,idtable.add_string("Object"), $4, stringtable.add_string(curr_filename)); 
+      }
+      | CLASS TYPEID INHERITS TYPEID '{' dummy_feature_list '}' ';'
+      { 
+        $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); 
+      }
+      | error ';'
+      {
+        yyerrok;
+      }
+      ;
+
+
+/* Feature list may be empty, but no empty features in list. */
+dummy_feature_list  : /* empty */
+                    {  
+                      $$ = nil_Features(); 
+                    }
+                    | dummy_feature_list feature
+                    {
+                      $$ = append_Features($1, single_Features($2));
+                    }
+                    ;
    
-    feature : OBJECTID '(' dummy_formal_list ')' ':' TYPEID '{' expression '}'
+feature : OBJECTID '(' dummy_formal_list ')' ':' TYPEID '{' expression '}' ';'
+        {
+          $$ = method($1, $3, $6, $8);
+        }
+        | OBJECTID '(' ')' ':' TYPEID '{' expression '}' ';'
+        {
+          $$ = method($1, nil_Formals(), $5, $7);
+        }
+        | OBJECTID ':' TYPEID ASSIGN expression ';'
+        {
+          $$ = attr($1, $3, $5);
+        }
+        | OBJECTID ':' TYPEID ';'
+        {
+          $$ = attr($1, $3, no_expr());
+        }
+        | error ';'
+        {
+          yyerrok;
+        }
+        ;
+
+/* There is no such a situation that a formal list is empty. */
+dummy_formal_list : dummy_formal_list ',' formal
+                  {
+                    $$ = append_Formals($1, single_Formals($3));
+                  }
+                  | formal
+                  {
+                    $$ = single_Formals($1);
+                  }
+                  ;
+
+formal  : OBJECTID ':' TYPEID
+        {
+          $$ = formal($1, $3);
+        }
+        ;
+    
+expression  : OBJECTID ASSIGN expression
             {
-              $$ = method($1, $3, $6, $8);
+              $$ = assign($1, $3);
             }
-            | OBJECTID ':' TYPEID '{' expression '}'
+            | expression '@' TYPEID '.' OBJECTID '(' dummy_expression_list ')'
             {
-              $$ = method($1, nil_Formals(), $3, $5);
+              $$ = static_dispatch($1, $3, $5, $7);
             }
-            | OBJECTID ':' TYPEID ASSIGN expression
+            | expression '.' OBJECTID '(' dummy_expression_list ')'
             {
-              $$ = attr($1, $3, $5);
+              $$ = dispatch($1, $3, $5);
             }
-            | OBJECTID ':' TYPEID
+            | expression '.' OBJECTID '(' ')'
             {
-              $$ = attr($1, $3, nil_Expressions());
+              $$ = static_dispatch($1, idtable.add_string("self"), $3, nil_Expressions());
+            }
+            | OBJECTID '(' dummy_expression_list ')'
+            {
+              $$ = dispatch(object(idtable.add_string("self")), $1, $3);
+            }
+            | OBJECTID '(' ')'
+            {
+              $$ = dispatch(object(idtable.add_string("self")), $1, nil_Expressions());
+            }
+            | IF expression THEN expression ELSE expression FI
+            {
+              $$  = cond($2, $4, $6);
+            }
+            | WHILE expression LOOP expression POOL
+            {
+              $$ = loop($2, $4);
+            }
+            | '{' dummy_block_expression_list '}'
+            {
+              $$ = block($2);
+            }
+            | LET dummy_let_expression
+            {
+              $$ = $2;
+            }
+            | CASE expression OF dummy_case_list ESAC
+            {
+              $$ = typcase($2, $4);
+            }
+            | ISVOID expression
+            {
+              $$ = isvoid($2);
+            }
+            | NEW TYPEID
+            {
+              $$ = new_($2);
+            }
+            | expression '+' expression
+            {
+              $$ = plus($1, $3);
+            }
+            | expression '-' expression
+            {
+              $$ = sub($1, $3);
+            }
+            | expression '*' expression
+            {
+              $$ = mul($1, $3);
+            }
+            | expression '/' expression
+            {
+              $$ = divide($1, $3);
+            }
+            | '~' expression
+            {
+              $$ = neg($2);
+            }
+            | expression '<' expression
+            {
+              $$ = lt($1, $3);
+            }
+            | expression LE expression
+            {
+              $$ = leq($1, $3);
+            }
+            | expression '=' expression
+            {
+              $$ = eq($1, $3);
+            }
+            | NOT expression
+            {
+              $$ = comp($2);
+            }
+            | '(' expression ')'
+            {
+              $$ = $2;
+            }
+            | OBJECTID
+            {
+              $$ = object($1);
+            }
+            | INT_CONST
+            {
+              $$ = int_const($1);
+            }
+            | BOOL_CONST
+            {
+              $$ = bool_const($1);
+            }
+            | STR_CONST
+            {
+              $$ = string_const($1);
             }
             ;
 
-    formal : OBJECTID ':' TYPEID
-           {
-             $$ = formal($1, $3);
-           }
-           ;
-    
 
-
-    ///////////////////////////////////////////////////////////////////
-    ////  Dummy_lists
-    ///////////////////////////////////////////////////////////////////
-
-    /* Feature list may be empty, but no empty features in list. */
-    dummy_feature_list: /* empty */
-                      {  
-                        $$ = nil_Features(); 
-                      }
-                      | dummy_feature_list feature ';'
-                      {
-                        $$ = append_Features($1, single_Features($2));
-                      }
-                      ;
-    
-    /* There is such situation that a formal list can be empty. */
-    dummy_formal_list : dummy_formal_list ',' formal
-                      {
-                        $$ = append_Formals($1, single_Formals($3));
-                      }
-                      | formal
-                      {
-                        $$ = single_Formals($1);
-                      }
-
-    dummy_expression_list: /* empty */
-                      {  
-                        $$ = nil_Expressions(); 
-                      }
-                      | dummy_expression_list ',' expression
+/* There is no such a situation that an expression list is empty. */
+dummy_expression_list : dummy_expression_list ',' expression
                       {
                         $$ = append_Expressions($1, single_Expressions($3));
                       }
+                      | expression
+                      {
+                        $$ = single_Expressions($1);
+                      }
+                      ;
 
-    /* end of grammar */
-    %%
+dummy_block_expression_list : dummy_block_expression_list expression ';'
+                            {
+                              $$ = append_Expressions($1, single_Expressions($2));
+                            }
+                            | expression ';'
+                            {
+                              $$ = single_Expressions($1);
+                            }
+                            | error ';'
+                            {
+                              yyerrok;
+                            }
+                            ;
+
+/*---------------------------------------------------------------------------------.
+|  LET expression introduces SHIFT/REDUCE conflicts here.                          |
+|  We apply a precedence to resolve the conflict.                                  |
+|  EXTEND_LET_EXPR is RIGHT association. By making expressions with LET trailling  |
+|  RIGHT association, the parser can always find the longest trailling expression. | 
+`_________________________________________________________________________________*/
+
+dummy_let_expression  : OBJECTID ':' TYPEID ASSIGN expression IN expression %prec EXTEND_LET_EXPR
+                      {
+                        $$ = let($1, $3, $5, $7);  
+                      }
+                      | OBJECTID ':' TYPEID IN expression %prec EXTEND_LET_EXPR
+                      {
+                        $$ = let($1, $3, no_expr(), $5);
+                      }
+                      | OBJECTID ':' TYPEID ASSIGN expression ',' dummy_let_expression
+                      {
+                        $$ = let($1, $3, $5, $7);
+                      }
+                      | OBJECTID ':' TYPEID ',' dummy_let_expression
+                      {
+                        $$ = let($1, $3, no_expr(), $5);
+                      }
+                      | error dummy_let_expression
+                      {
+                        yyerrok;
+                      }
+                      ;
+
+/* There is no such a situation that an expression list is empty. */
+dummy_case_list : OBJECTID ':' TYPEID DARROW expression ';'
+                {
+                  $$ = single_Cases(branch($1, $3, $5));
+                }
+                | OBJECTID ':' TYPEID DARROW expression ';' dummy_case_list
+                {
+                  $$ = append_Cases(single_Cases(branch($1, $3, $5)), $7);
+                }
+                ;
+
+/* end of grammar */
+%%
     
-    /* This function is called automatically when Bison detects a parse error. */
-    void yyerror(char *s)
-    {
-      extern int curr_lineno;
+/* This function is called automatically when Bison detects a parse error. */
+void yyerror(char *s)
+{
+  extern int curr_lineno;
       
-      cerr << "\"" << curr_filename << "\", line " << curr_lineno << ": " \
-      << s << " at or near ";
-      print_cool_token(yychar);
-      cerr << endl;
-      omerrs++;
+  cerr << "\"" << curr_filename << "\", line " << curr_lineno << ": " \
+  << s << " at or near ";
+  print_cool_token(yychar);
+  cerr << endl;
+  omerrs++;
       
-      if(omerrs>50) {fprintf(stdout, "More than 50 errors\n"); exit(1);}
-    }
-    
-    
+  if(omerrs>50) {fprintf(stdout, "More than 50 errors\n"); exit(1);}
+}

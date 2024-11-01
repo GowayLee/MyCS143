@@ -79,7 +79,8 @@ extern int cool_yydebug;
     ASSIGN = 280,                  /* ASSIGN  */
     NOT = 281,                     /* NOT  */
     LE = 282,                      /* LE  */
-    ERROR = 283                    /* ERROR  */
+    ERROR = 283,                   /* ERROR  */
+    EXTEND_LET_EXPR = 285          /* EXTEND_LET_EXPR  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -114,30 +115,30 @@ extern int cool_yydebug;
 #define NOT 281
 #define LE 282
 #define ERROR 283
+#define EXTEND_LET_EXPR 285
 
 /* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 88 "cool.y"
+#line 87 "cool.y"
 
-      Boolean boolean;
-      Symbol symbol;
-      Program program;
-      Class_ class_;
-      Classes classes;
-      Feature feature;
-      Features features;
-      Formal formal;
-      Formals formals;
-      Case case_;
-      Cases cases;
-      Expression expression;
-      Expressions expressions;
-      char *error_msg;
-    
+  Boolean boolean;
+  Symbol symbol;
+  Program program;
+  Class_ class_;
+  Classes classes;
+  Feature feature;
+  Features features;
+  Formal formal;
+  Formals formals;
+  Case case_;
+  Cases cases;
+  Expression expression;
+  Expressions expressions;
+  char *error_msg;
 
-#line 141 "cool.tab.h"
+#line 142 "cool.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;
