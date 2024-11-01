@@ -3,6 +3,8 @@ ASSN = 3
 CLASS= cs143
 CLASSDIR= ../..
 LIB=  -lfl 
+FL_LIB_DIR = /usr/lib
+
 AR= gar
 ARCHIVE_NEW= -cr
 RANLIB= gar -qs
@@ -41,7 +43,7 @@ ${OUTPUT}:	parser good.cl bad.cl
 	-./myparser bad.cl >bad.output 2>&1 
 
 parser: ${OBJS}
-	${CC} ${CFLAGS} ${OBJS} ${LIB} -o parser
+	${CC} ${CFLAGS} ${OBJS} -L ${FL_LIB_DIR} ${LIB} -o parser
 
 .cc.o:
 	${CC} ${CFLAGS} -c $<
@@ -66,7 +68,8 @@ ${HSRC}:
 	-ln -s ${CLASSDIR}/include/PA${ASSN}/$@ $@
 
 clean :
-	-rm -f ${OUTPUT} *.s core ${OBJS} ${CGEN} ${HGEN} lexer parser cgen semant *~ *.a *.o 
+#	-rm -f ${OUTPUT} *.s core ${OBJS} ${CGEN} ${HGEN} lexer parser cgen semant *~ *.a *.o 
+	-rm -f ${OUTPUT} *.s core ${OBJS} ${CGEN} ${HGEN} parser cgen semant *~ *.a *.o 
 
 clean-compile:
 	@-rm -f core ${OBJS} ${CGEN} ${HGEN} ${LSRC}
