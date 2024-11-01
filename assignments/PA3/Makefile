@@ -3,6 +3,8 @@ ASSN = 3
 CLASS= cs143
 CLASSDIR= ../..
 LIB=  -lfl 
+
+# Specify the location of libfl
 FL_LIB_DIR = /usr/lib
 
 AR= gar
@@ -28,7 +30,9 @@ CPPINCLUDE= -I. -I${CLASSDIR}/include/PA${ASSN} -I${CLASSDIR}/src/PA${ASSN}
 BFLAGS = -d -v -y -b cool --debug -p cool_yy
 
 CC=g++
-CFLAGS=-g -Wall -Wno-unused -Wno-deprecated  -Wno-write-strings -DDEBUG ${CPPINCLUDE}
+
+# To make the output of compiler using higer C++ standard clean, add `-Wno-register`.
+CFLAGS=-g -Wall -Wno-unused -Wno-deprecated  -Wno-write-strings -Wno-register -DDEBUG ${CPPINCLUDE}
 FLEX=flex ${FFLAGS}
 BISON= bison ${BFLAGS}
 DEPEND = ${CC} -MM ${CPPINCLUDE}
@@ -68,8 +72,10 @@ ${HSRC}:
 	-ln -s ${CLASSDIR}/include/PA${ASSN}/$@ $@
 
 clean :
-#	-rm -f ${OUTPUT} *.s core ${OBJS} ${CGEN} ${HGEN} lexer parser cgen semant *~ *.a *.o 
+# It is wired that in PA3, there is no command to make a lexer. So, I copy lexer from PA2.
+# And remove `lexer` here to avoid Make automatically remove my lexer.
 	-rm -f ${OUTPUT} *.s core ${OBJS} ${CGEN} ${HGEN} parser cgen semant *~ *.a *.o 
+#	-rm -f ${OUTPUT} *.s core ${OBJS} ${CGEN} ${HGEN} lexer parser cgen semant *~ *.a *.o 
 
 clean-compile:
 	@-rm -f core ${OBJS} ${CGEN} ${HGEN} ${LSRC}
