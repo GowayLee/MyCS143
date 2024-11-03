@@ -47,7 +47,9 @@ ${OUTPUT}:	parser good.cl bad.cl
 	-./myparser bad.cl >bad.output 2>&1 
 
 parser: ${OBJS}
+# add -L to specify the location of libfl
 	${CC} ${CFLAGS} ${OBJS} -L ${FL_LIB_DIR} ${LIB} -o parser
+# ${CC} ${CFLAGS} ${OBJS} ${LIB} -o parser
 
 .cc.o:
 	${CC} ${CFLAGS} -c $<

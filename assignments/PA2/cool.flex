@@ -73,21 +73,21 @@ char get_escaped_char(const char c) {
 // Comment related
 int nested_comment_level = 0;
 
-// Record column number
-extern int curr_columnno;
-#define YY_USER_ACTION update_position();
+// // Record column number
+// extern int curr_columnno;
+// #define YY_USER_ACTION update_position();
 
-int prev_lineno = 1;
-int prev_yyleng = yyleng;
-void update_position() {
-  if (yytext[0] == '\0') return;
-  if (prev_lineno != curr_lineno) {
-    curr_columnno = 0;
-    prev_lineno = curr_lineno;
-  }
-  curr_columnno += prev_yyleng;
-  prev_yyleng = yyleng;
-}
+// int prev_lineno = 1;
+// int prev_yyleng = yyleng;
+// void update_position() {
+  // if (yytext[0] == '\0') return;
+  // if (prev_lineno != curr_lineno) {
+    // curr_columnno = 0;
+    // prev_lineno = curr_lineno;
+  // }
+  // curr_columnno += prev_yyleng;
+  // prev_yyleng = yyleng;
+// }
 
 %}
 

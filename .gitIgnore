@@ -4,6 +4,6 @@
 *.o
 *.swp
 *.output
-
+test-output/
 cool-lex.cc
 

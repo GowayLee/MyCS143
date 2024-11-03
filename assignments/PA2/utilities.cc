@@ -162,11 +162,11 @@ void print_cool_token(int tok)
 }
 
 // dump the token in format readable by the sceond phase token lexer
-// void dump_cool_token(ostream& out, int lineno, int token, YYSTYPE yylval)
-void dump_cool_token(ostream& out, int lineno, int columnno, int token, YYSTYPE yylval)
+void dump_cool_token(ostream& out, int lineno, int token, YYSTYPE yylval)
+// void dump_cool_token(ostream& out, int lineno, int columnno, int token, YYSTYPE yylval)
 {
-    // out << "#" << lineno << " " << cool_token_to_string(token);
-    out << "#" << lineno << ':' << columnno << " " << cool_token_to_string(token);
+    out << "#" << lineno << " " << cool_token_to_string(token);
+    // out << "#" << lineno << ':' << columnno << " " << cool_token_to_string(token);
 
     switch (token) {
     case (STR_CONST):
