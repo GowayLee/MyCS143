@@ -21,6 +21,9 @@ typedef ClassTable *ClassTableP;
 
 class ClassTable {
 private:
+  // A list to store all the classes appear in 
+  //  the Program_class node, AKA "ast_root".
+  Classes class_list;
   int semant_errors;
   void install_basic_classes();
   ostream& error_stream;

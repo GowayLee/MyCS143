@@ -8,7 +8,6 @@
 
 extern int semant_debug;
 extern char *curr_filename;
-
 //////////////////////////////////////////////////////////////////////
 //
 // Symbols
@@ -80,12 +79,17 @@ static void initialize_constants(void)
   val = idtable.add_string("_val");
 }
 
+// Constructor of ClassTable.
 ClassTable::ClassTable(Classes classes) : semant_errors(0), error_stream(cerr)
 {
-
+  this->class_list = classes;
   /* Fill this in */
 }
 
+/*----------------------------------------------------------------------------------.
+| ClassTable::install_basic_classes()                                               |
+|  Initialize build-in classes of COOL, which can be directly used by programmers.  |
+`__________________________________________________________________________________*/
 void ClassTable::install_basic_classes()
 {
 
@@ -186,6 +190,8 @@ void ClassTable::install_basic_classes()
                                         Str,
                                         no_expr()))),
              filename);
+  
+  // Append these pre-defined classes into class_list.
 }
 
 ////////////////////////////////////////////////////////////////////
