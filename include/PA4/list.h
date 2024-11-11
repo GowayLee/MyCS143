@@ -63,7 +63,7 @@ void list_print(S &str, List<T> *l)
 {
    str << "[\n";
    for(; l != NULL; l = l->tl())
-	str << *(l->hd()) << " ";
+	 str << *(l->hd()) << " ";
    str << "]\n";
 }
 
