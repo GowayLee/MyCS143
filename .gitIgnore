@@ -1,7 +1,2 @@
-*.dev.*
-*.o
-*.swp
-*.output
-test-output/
-
 .vscode/
+*.o

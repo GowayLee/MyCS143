@@ -2,7 +2,8 @@
 ASSN = 3
 CLASS= cs143
 CLASSDIR= ../..
-LIB=  -lfl 
+#LIB=  -lfl 
+LIB= 
 
 # Specify the location of libfl
 FL_LIB_DIR = /usr/lib
@@ -50,6 +51,9 @@ parser: ${OBJS}
 # add -L to specify the location of libfl
 	${CC} ${CFLAGS} ${OBJS} -L ${FL_LIB_DIR} ${LIB} -o parser
 # ${CC} ${CFLAGS} ${OBJS} ${LIB} -o parser
+
+lexer: ${OBJS}
+	${CC} ${CFLAGS} ${OBJS} -o lexer
 
 .cc.o:
 	${CC} ${CFLAGS} -c $<

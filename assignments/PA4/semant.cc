@@ -149,18 +149,21 @@ ClassTable::ClassTable(Classes classes) : semant_errors(0), error_stream(cerr)
 
 int ClassTable::check_inheritance_graph(Classes classes)
 {
+  bool contain_main = false;
   // Load classes into free_node_set, check dupilcate define
   for (int i = classes->first(); classes->more(i); i = classes->next(i))
   {
     Class_ cur_class = classes->nth(i);
     Symbol name = cur_class->getName();
     Symbol parent_name = cur_class->getParentName();
+    if (name == Main)
+      contain_main = true;
     if (name == Object || name == IO || name == Int || name == Str || name == Bool)
     {
       semant_error(cur_class) << "Cannot redefine basic class: " << name;
       return 1;
     }
-    if (parent_name == IO || parent_name == Int || parent_name == Str || parent_name == Bool)
+    if (parent_name == IO || parent_name == Int || parent_name == Str || parent_name == Bool || parent_name == SELF_TYPE)
     {
       semant_error(cur_class) << "Cannot inherit from basic class: " << parent_name;
       return 1;
@@ -173,6 +176,11 @@ int ClassTable::check_inheritance_graph(Classes classes)
     }
     // Load cur_class to class_map.
     class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(name, new InheritanceGraphNode(cur_class)));
+  }
+  if (!contain_main)
+  {
+    semant_error() << "No main class";
+    return 1;
   }
   // Construct graph based on free_node_set, check the rest of rules
   if (inheritance_graph->construct_tree() != 1)
