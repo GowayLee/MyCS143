@@ -1,5 +1,3 @@
-
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -79,6 +77,16 @@ static void initialize_constants(void)
   val = idtable.add_string("_val");
 }
 
+// Constructor of ClassTable.
+ClassTable::ClassTable(Classes classes)
+{
+  this->inheritance_graph = new InheritanceGraph();
+  // Install all the classes and pre-defined classes in to list.
+  this->install_basic_classes();
+  // Conduct the Inheritance checking
+  this->check_inheritance_graph(classes);
+}
+
 // Load classes in program into free_node_set
 int InheritanceGraph::add_free_node(Class_ c)
 {
@@ -128,65 +136,43 @@ int InheritanceGraph::construct_tree()
     new_leaf_map = temp_ptr;
   }
 
-  if (free_node_set->size() != 0) 
+  if (free_node_set->size() != 0)
     // indicate that there have classe(s) with non-defined parent
     // or cyclic inheritance(s) exist(s)
     return 1;
   return 0;
 }
 
-// Constructor of ClassTable.
-ClassTable::ClassTable(Classes classes) : semant_errors(0), error_stream(cerr)
+void ClassTable::check_inheritance_graph(Classes classes)
 {
-  this->inheritance_graph = new InheritanceGraph();
-
-  // Install all the classes and pre-defined classes in to list.
-  this->install_basic_classes();
-  /* Fill this in */
-  // Conduct the Inheritance checking
-  this->check_inheritance_graph(classes);
-}
-
-int ClassTable::check_inheritance_graph(Classes classes)
-{
-  bool contain_main = false;
   // Load classes into free_node_set, check dupilcate define
   for (int i = classes->first(); classes->more(i); i = classes->next(i))
   {
     Class_ cur_class = classes->nth(i);
     Symbol name = cur_class->getName();
     Symbol parent_name = cur_class->getParentName();
-    if (name == Main)
-      contain_main = true;
     if (name == Object || name == IO || name == Int || name == Str || name == Bool)
     {
-      semant_error(cur_class) << "Cannot redefine basic class: " << name;
-      return 1;
+      semant_error(cur_class) << "Cannot redefine basic class: " << name << endl;
+      continue;
     }
     if (parent_name == IO || parent_name == Int || parent_name == Str || parent_name == Bool || parent_name == SELF_TYPE)
     {
-      semant_error(cur_class) << "Cannot inherit from basic class: " << parent_name;
-      return 1;
+      semant_error(cur_class) << "Cannot inherit from basic class: " << parent_name << endl;
+      continue;
     }
     // Load cur_class to free_node_set, check duplicating defined, as well.
     if (inheritance_graph->add_free_node(cur_class) == 1)
     {
-      semant_error(cur_class) << "class: " << name << " is already defined";
-      return 1;
+      semant_error(cur_class) << "Duplicate definition of class " << name << "." << endl;
+      continue;
     }
     // Load cur_class to class_map.
     class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(name, new InheritanceGraphNode(cur_class)));
   }
-  if (!contain_main)
-  {
-    semant_error() << "No main class";
-    return 1;
-  }
   // Construct graph based on free_node_set, check the rest of rules
-  if (inheritance_graph->construct_tree() != 1)
-    return 0;
-  analysis_inheritance_error();
-  return 1;
+  if (inheritance_graph->construct_tree())
+    analysis_inheritance_error();
 }
 
 // Anaylsis errors between classes left in free_node_set
@@ -205,12 +191,12 @@ void ClassTable::analysis_inheritance_error()
     std::string err_msg = strcat("  ->  class ", ptr->getName()->get_string()); // "  ->  class xxx"
     temp_node_set->insert(ptr);
     // Collect all the ancestors of the current checking class and detect cyclic inheritance
-    while ((it = free_node_set->find((*class_map)[ptr->getParentName()])) != free_node_set->end())
+    while ((it = free_node_set->find(ptr->getParent())) != free_node_set->end())
     {
       ptr = *it;
       err_msg.insert(0, strcat("  ->  class ", ptr->getName()->get_string())); // "  ->  class parent  ->  class child"
       temp_node_set->insert(ptr);
-      if ((it = temp_node_set->find((*class_map)[ptr->getParentName()])) != temp_node_set->end())
+      if ((it = temp_node_set->find(ptr->getParent())) != temp_node_set->end())
       {
         ptr = *it;
         // ">> Class child <<  ->  Class parent  ->  Class child"
@@ -219,8 +205,10 @@ void ClassTable::analysis_inheritance_error()
       }
     }
     if (it == free_node_set->end()) // Find undefined parent
+    {
       err_msg.insert(0, strcat(strcat("Undefined parent class: ", ptr->getParentName()->get_string()), "\n?"));
-    semant_error(ptr->getClass()) << err_msg;
+    }
+    semant_error(ptr->getClass()) << err_msg << endl;
 
     // Clean up checked classes
     free_node_set->erase(temp_node_set->begin(), temp_node_set->end());
@@ -344,6 +332,194 @@ void ClassTable::install_basic_classes()
   Str_node->setParent(Object_node);
 }
 
+// Install methods into method_env and check main class and main method.
+// Check duplicate definition of method in one class.
+// In this period, we don't check the conrrectness of inheritance and override.
+int ClassTable::install_features(Classes classes)
+{
+  bool check_main_class = false;
+  bool check_main_method = false;
+  std::set<Symbol> *method_set = new std::set<Symbol>(); // Maintain a set to detect duplicate definition of method in one class
+  std::set<Symbol> *attr_set = new std::set<Symbol>(); // Detect dupilicate definition of attribute in one class
+
+  for (int i = classes->first(); classes->more(i); i = classes->next(i))
+  {
+    method_set->clear();
+    attr_set->clear();
+
+    Class_ curr_class = classes->nth(i);
+    if (!check_main_class && curr_class->getName() == Main)
+      check_main_class = true;
+    Features features = curr_class->getFeatures();
+    for (int j = features->first(); features->more(j); j = features->next(j))
+    {
+      if (features->nth(j)->isMethod())
+      {
+        method_class *curr_method = static_cast<method_class *>(features->nth(j));
+        if (method_set->find(curr_method->getName()) != method_set->end())
+        {
+          semant_error(curr_class) << "Duplicate definition of method " << curr_method->getName() << "." << endl;
+          continue;
+        }
+        if (check_main_class && !check_main_method && curr_method->getName() == Main)
+          check_main_method = true;
+
+        Formals formals = curr_method->getFormals();
+        std::vector<Symbol> *arg_types = new std::vector<Symbol>();
+        // Insert arguments' types
+        for (int k = formals->first(); formals->more(k); k = formals->next(k))
+          arg_types->push_back(formals->nth(k)->getType());
+        // Insert return type
+        arg_types->push_back(curr_method->getReturnType());
+        // Insert into method_env
+        Env::method_map->insert(std::make_pair(std::make_pair(curr_class->getName(), curr_method->getName()), arg_types));
+      }
+      else
+      {
+        attr_class *curr_attr = static_cast<attr_class *>(features->nth(j));
+        if (attr_set->find(curr_attr->getName()) != attr_set->end())
+        {
+          semant_error(curr_class) << "Duplicate definition of attribute " << curr_attr->getName() << "." << endl;
+          continue;
+        }
+        // Insert into object_env
+        Env::attr_map->insert(std::make_pair(std::make_pair(curr_class->getName(), curr_attr->getName()), curr_attr->getType()));
+      }
+    }
+  }
+
+  if (!check_main_class)
+    semant_error() << "Main class is missing." << endl;
+  else if (!check_main_method)
+    semant_error() << "Main method is missing." << endl;
+  else
+    return 0;
+  return 1;
+}
+
+// Get all ancestors of the current class
+// Return a List containing all ancestors and current class
+List<Class__class> *ClassTable::get_ancestors(Class_ cur_class)
+{
+  // Initialize List and append cur_class
+  List<Class__class> *ancestors = new List<Class__class>(cur_class, (List<Class__class> *)NULL);
+  InheritanceGraphNode *cur_node = (*class_map)[cur_class->getName()];
+  while (cur_node->getParent()) // Stop when reach root
+    ancestors = new List<Class__class>((cur_node = cur_node->getParent())->getClass(), ancestors);
+  return ancestors;
+}
+
+int ClassTable::setup_environment(Class_ cur_class)
+{
+  int state = 0;
+  // Initalize object_env and method_env
+  Env::object_env = new SymbolTable<Symbol, Entry>();
+  Env::method_env = new SymbolTable<Symbol, std::vector<Symbol>>();
+  // Set up type environments 
+  List<Class__class> *ancestors = get_ancestors(cur_class);
+  Env::object_env->enterscope();
+  Env::method_env->enterscope();
+  Env::cur_class_name = cur_class->getName();
+  // Traverse ancestors from root to current class, install features and check override
+  for (List<Class__class> *i = ancestors; i != NULL; i = i->tl())
+  {
+    Class_ cur_ancestor = i->hd();
+    for (int j = cur_ancestor->getFeatures()->first(); cur_ancestor->getFeatures()->more(j); j = cur_ancestor->getFeatures()->next(j))
+    {
+      if (cur_ancestor->getFeatures()->nth(j)->isMethod())
+      { 
+        method_class *curr_method = static_cast<method_class *>(cur_ancestor->getFeatures()->nth(j));
+        Formals formals = curr_method->getFormals();
+        std::vector<Symbol> *arg_types = new std::vector<Symbol>();
+        // Insert arguments' types
+        for (int k = formals->first(); formals->more(k); k = formals->next(k))
+          arg_types->push_back(formals->nth(k)->getType());
+        // Insert return type
+        arg_types->push_back(curr_method->getReturnType());
+
+        // Same method name exists in ancestor, check override
+        if (std::vector<Symbol> *p_arg_types = Env::method_env->lookup(curr_method->getName())) 
+        {
+          // check the number of arguments
+          if (p_arg_types->size() != arg_types->size())
+          {
+            semant_error(cur_class) << "Method " << curr_method->getName() << " has different number of arguments with signature super class." << endl;
+            Env::method_map->erase(std::make_pair(cur_class->getName(), curr_method->getName())); // remove current method
+            state = 1;
+            continue;
+          }
+          // check the type of arguments
+          for (long unsigned int k = 0; k < p_arg_types->size(); k++)
+          {
+            if ((*p_arg_types)[k] != (*arg_types)[k])
+            {
+              semant_error(cur_class) << "Method " << curr_method->getName() << " has different type of arguments with signature super class." << endl;
+              Env::method_map->erase(std::make_pair(cur_class->getName(), curr_method->getName())); // remove current method
+              state = 1;
+              continue;
+            }
+          }
+          // legal override
+          continue;
+        }
+        Env::method_env->addid(curr_method->getName(), arg_types);
+      }
+      else
+      {
+        attr_class *curr_attr = static_cast<attr_class *>(cur_ancestor->getFeatures()->nth(j));
+        if (Env::object_env->lookup(curr_attr->getName())) // Duplicate define attributes
+        {
+          semant_error(cur_class) << "Attribute " << curr_attr->getName() << " is already defined in super class" << endl;
+          Env::attr_map->erase(std::make_pair(cur_class->getName(), curr_attr->getName())); // remove current attribute
+          state = 1;
+          continue;
+        }
+        Env::object_env->addid(curr_attr->getName(), curr_attr->getType());
+      }
+    }
+  }
+  return state;
+}
+
+void program_class::type_check()
+{
+  // Set up type environments
+  // 1. Install methods of all classes into the environment
+  if (ClassTable::install_features(classes)) // Missing main class or main method
+    return;
+
+  // 2. Traverse each class and do type checking, maintain the object_env at the same time.
+  for (int i = classes->first(); classes->more(i); i = classes->next(i))
+  {
+    if (ClassTable::setup_environment(classes->nth(i)))
+      continue;
+    classes->nth(i)->type_check(); // Traverse tree and get all nodes type checked
+  }
+}
+
+void class__class::type_check()
+{
+  for (int i = getFeatures()->first(); getFeatures()->more(i); i = getFeatures()->next(i))
+  {
+    if (getFeatures()->nth(i)->isMethod())
+      static_cast<method_class *>(getFeatures()->nth(i))->type_check();
+    else
+      static_cast<attr_class *>(getFeatures()->nth(i))->type_check();
+  }
+}
+
+void attr_class::type_check()
+{
+}
+
+void method_class::type_check()
+{
+}
+
+
+
+
+
 ////////////////////////////////////////////////////////////////////
 //
 // semant_error is an overloaded function for reporting errors
@@ -396,8 +572,15 @@ void program_class::semant()
   /* ClassTable constructor may do some semantic analysis */
   // Here, we decide to conduct Inheritance checking first, inside the ClassTable constructor.
   ClassTable *classtable = new ClassTable(classes);
+  if (classtable->errors())
+  {
+    cerr << "Compilation halted due to static semantic errors." << endl;
+    exit(1);
+  }
 
   /* some semantic analysis code may go here */
+  // Here, we conduct Type checking.
+  type_check();
 
   if (classtable->errors())
   {
