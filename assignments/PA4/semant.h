@@ -21,7 +21,7 @@ typedef ClassTable *ClassTableP;
 class InheritanceGraphNode
 {
 private:
-  Class_ class_; // The class itself
+  Class_ class_;                // The class itself
   InheritanceGraphNode *parent; // The parent node
 
 public:
@@ -36,7 +36,7 @@ public:
 class InheritanceGraph
 {
 private:
-  InheritanceGraphNode *root;    // The root of the inheritance graph, always be "Object"
+  InheritanceGraphNode *root; // The root of the inheritance graph, always be "Object"
   std::set<InheritanceGraphNode *> *free_node_set;
 
 public:
@@ -53,9 +53,9 @@ public:
 class Env
 {
 public:
-  static SymbolTable<Symbol, Entry> *object_env; // <object-identifier, Type>
-  static SymbolTable<Symbol, std::vector<Symbol>> *method_env; // <object-identifier, Type>
-  static std::map<std::pair<Symbol, Symbol>, Symbol> *attr_map; // <<class-name, method-name>, Type-list>
+  static SymbolTable<Symbol, Entry> *object_env;                                 // <object-identifier, Type>
+  static SymbolTable<Symbol, std::vector<Symbol>> *method_env;                   // <object-identifier, Type>
+  static std::map<std::pair<Symbol, Symbol>, Symbol> *attr_map;                  // <<class-name, method-name>, Type-list>
   static std::map<std::pair<Symbol, Symbol>, std::vector<Symbol> *> *method_map; // <<class-name, method-name>, Type-list>
   static Symbol cur_class_name;
 };
@@ -64,8 +64,7 @@ SymbolTable<Symbol, Entry> *Env::object_env = new SymbolTable<Symbol, Entry>();
 SymbolTable<Symbol, std::vector<Symbol>> *Env::method_env = new SymbolTable<Symbol, std::vector<Symbol>>();
 std::map<std::pair<Symbol, Symbol>, Symbol> *Env::attr_map = new std::map<std::pair<Symbol, Symbol>, Symbol>();
 std::map<std::pair<Symbol, Symbol>, std::vector<Symbol> *> *Env::method_map = new std::map<std::pair<Symbol, Symbol>, std::vector<Symbol> *>();
-Symbol Env::cur_class_name = (Symbol)NULL; 
-
+Symbol Env::cur_class_name = (Symbol)NULL;
 
 // This is a structure that may be used to contain the semantic
 // information such as the inheritance graph.  You may use it or not as

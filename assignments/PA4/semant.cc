@@ -340,7 +340,7 @@ int ClassTable::install_features(Classes classes)
   bool check_main_class = false;
   bool check_main_method = false;
   std::set<Symbol> *method_set = new std::set<Symbol>(); // Maintain a set to detect duplicate definition of method in one class
-  std::set<Symbol> *attr_set = new std::set<Symbol>(); // Detect dupilicate definition of attribute in one class
+  std::set<Symbol> *attr_set = new std::set<Symbol>();   // Detect dupilicate definition of attribute in one class
 
   for (int i = classes->first(); classes->more(i); i = classes->next(i))
   {
@@ -415,7 +415,7 @@ int ClassTable::setup_environment(Class_ cur_class)
   // Initalize object_env and method_env
   Env::object_env = new SymbolTable<Symbol, Entry>();
   Env::method_env = new SymbolTable<Symbol, std::vector<Symbol>>();
-  // Set up type environments 
+  // Set up type environments
   List<Class__class> *ancestors = get_ancestors(cur_class);
   Env::object_env->enterscope();
   Env::method_env->enterscope();
@@ -427,7 +427,7 @@ int ClassTable::setup_environment(Class_ cur_class)
     for (int j = cur_ancestor->getFeatures()->first(); cur_ancestor->getFeatures()->more(j); j = cur_ancestor->getFeatures()->next(j))
     {
       if (cur_ancestor->getFeatures()->nth(j)->isMethod())
-      { 
+      {
         method_class *curr_method = static_cast<method_class *>(cur_ancestor->getFeatures()->nth(j));
         Formals formals = curr_method->getFormals();
         std::vector<Symbol> *arg_types = new std::vector<Symbol>();
@@ -438,7 +438,7 @@ int ClassTable::setup_environment(Class_ cur_class)
         arg_types->push_back(curr_method->getReturnType());
 
         // Same method name exists in ancestor, check override
-        if (std::vector<Symbol> *p_arg_types = Env::method_env->lookup(curr_method->getName())) 
+        if (std::vector<Symbol> *p_arg_types = Env::method_env->lookup(curr_method->getName()))
         {
           // check the number of arguments
           if (p_arg_types->size() != arg_types->size())
@@ -510,15 +510,12 @@ void class__class::type_check()
 
 void attr_class::type_check()
 {
+  Symbol attr_type = (getType() == SELF_TYPE) ? Env::cur_class_name : getType();
 }
 
 void method_class::type_check()
 {
 }
-
-
-
-
 
 ////////////////////////////////////////////////////////////////////
 //
