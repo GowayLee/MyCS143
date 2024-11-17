@@ -41,7 +41,8 @@ static Symbol
     str_field,
     substr,
     type_name,
-    val;
+    val,
+    ERR_type; //  When an error occurs during type-checking, the type of the current node is ERR_type.
 //
 // Initializing the predefined symbols.
 //
@@ -75,6 +76,7 @@ static void initialize_constants(void)
   substr = idtable.add_string("substr");
   type_name = idtable.add_string("type_name");
   val = idtable.add_string("_val");
+  ERR_type = idtable.add_string("ERR_type");
 }
 
 // Constructor of ClassTable.
@@ -322,14 +324,23 @@ void ClassTable::install_basic_classes()
 
   InheritanceGraphNode *Object_node = new InheritanceGraphNode(Object_class);
   this->inheritance_graph->setRoot(Object_node); // Object class is the root of the inheritance graph.
+  class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(Object, Object_node));
+
   InheritanceGraphNode *IO_node = new InheritanceGraphNode(IO_class);
   IO_node->setParent(Object_node);
+  class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(IO, IO_node));
+
   InheritanceGraphNode *Int_node = new InheritanceGraphNode(Int_class);
   Int_node->setParent(Object_node);
+  class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(Int, Int_node));
+
   InheritanceGraphNode *Bool_node = new InheritanceGraphNode(Bool_class);
   Bool_node->setParent(Object_node);
+  class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(Bool, Bool_node));
+
   InheritanceGraphNode *Str_node = new InheritanceGraphNode(Str_class);
   Str_node->setParent(Object_node);
+  class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(Str, Str_node));
 }
 
 // Install methods into method_env and check main class and main method.
@@ -413,15 +424,16 @@ int ClassTable::setup_environment(Class_ cur_class)
 {
   int state = 0;
   // Initalize object_env and method_env
+  // TODO: memory free
   Env::object_env = new SymbolTable<Symbol, Entry>();
   Env::method_env = new SymbolTable<Symbol, std::vector<Symbol>>();
   // Set up type environments
-  List<Class__class> *ancestors = get_ancestors(cur_class);
+  List<Class__class> *ancestors = get_ancestors(cur_class); // TODO: Memory free
   Env::object_env->enterscope();
   Env::method_env->enterscope();
-  Env::cur_class_name = cur_class->getName();
+  Env::cur_class = cur_class;
   // Traverse ancestors from root to current class, install features and check override
-  for (List<Class__class> *i = ancestors; i != NULL; i = i->tl())
+  for (List<Class__class> *i = ancestors; i->tl(); i = i->tl())
   {
     Class_ cur_ancestor = i->hd();
     for (int j = cur_ancestor->getFeatures()->first(); cur_ancestor->getFeatures()->more(j); j = cur_ancestor->getFeatures()->next(j))
@@ -481,6 +493,93 @@ int ClassTable::setup_environment(Class_ cur_class)
   return state;
 }
 
+// Return true if type2 <= type1
+bool ClassTable::check_subtype(Symbol type1, Symbol type2)
+{
+  if (type1 == No_type && type2 == No_type)
+    return true; // filter out No_type
+  if (type1 == No_type || type2 == No_type)
+    return false;
+  // Check existence of both types
+  std::map<Symbol, InheritanceGraphNode *>::iterator it;
+  if (type1 != Object && (it = class_map->find(type1)) == class_map->end()) // Cannot find type1 in class_map
+  {
+    semant_error(Env::cur_class) << "Type " << type1 << " is undefined." << endl;
+    return false;
+  }
+  if ((it = class_map->find(type2)) == class_map->end()) // Cannot find type2 in class_map
+  {
+    semant_error(Env::cur_class) << "Type " << type2 << " is undefined." << endl;
+    return false;
+  }
+
+  // Check subtyping
+  if (type1 == Object)
+    return true;
+
+  InheritanceGraphNode *ptr = it->second;
+  while (ptr)
+  {
+    if (ptr->getName() == type1)
+      return true;
+    ptr = ptr->getParent();
+  }
+  return false;
+}
+
+// Return LCA type of type1 and type2
+Symbol ClassTable::get_LCA(Symbol type1, Symbol type2)
+{
+  if (type1 == No_type || type2 == No_type) // LCA of No_type and any type is No_type
+    return No_type;
+
+  // check the existence of both types
+  std::map<Symbol, InheritanceGraphNode *>::iterator it1;
+  std::map<Symbol, InheritanceGraphNode *>::iterator it2;
+  if ((it1 = class_map->find(type1)) == class_map->end()) // Cannot find type1 in class_map
+  {
+    semant_error(Env::cur_class) << "Type " << type1 << " is undefined." << endl;
+    return ERR_type;
+  }
+  if ((it2 = class_map->find(type2)) == class_map->end()) // Cannot find type2 in class_map
+  {
+    semant_error(Env::cur_class) << "Type " << type2 << " is undefined." << endl;
+    return ERR_type;
+  }
+
+  // Find LCA
+  List<Class__class> *path1 = new List<Class__class>(it1->second->getClass(), (List<Class__class> *)NULL);
+  // Generate a path from type1 to Object and check subtyping of type1 and type2 at the same time
+  for(InheritanceGraphNode *ptr = it1->second; ptr->getParent(); ptr = ptr->getParent())
+  {
+    if (ptr == it2->second) // Indicate that *ptr is equal to or a subtype of type2
+    {
+      delete path1;
+      return ptr->getName();
+    }
+    path1 = new List<Class__class>(ptr->getClass(), path1);
+  }
+  List<Class__class> *path2 = new List<Class__class>(it2->second->getClass(), (List<Class__class> *)NULL);
+  for(InheritanceGraphNode *ptr = it2->second; ptr->getParent(); ptr = ptr->getParent())
+  {
+    if (ptr == it1->second) // Indicate that *ptr is equal to or a subtype of type1
+    {
+      delete path1, path2;
+      return ptr->getName();
+    }
+    path2 = new List<Class__class>(ptr->getClass(), path2);
+  }
+  // type1 and type2 are on the different path
+  for (path1, path2; path1->tl()->tl() && path2->tl()->tl(); path1 = path1->tl(), path2 = path2->tl())
+    if (path1->tl()->hd() != path2->tl()->hd())
+    {
+      Symbol result = path1->hd()->getName();
+      delete path1, path2;
+      return result;
+    }
+}
+
+
 void program_class::type_check()
 {
   // Set up type environments
@@ -510,12 +609,247 @@ void class__class::type_check()
 
 void attr_class::type_check()
 {
-  Symbol attr_type = (getType() == SELF_TYPE) ? Env::cur_class_name : getType();
+  Symbol attr_type = (getType() == SELF_TYPE) ? Env::cur_class->getName() : getType();
+
+  Env::object_env->enterscope(); // Set up a new scope with SELF_TYPE = self
+  Env::object_env->addid(SELF_TYPE, self);
+  init->type_check(); // Check the type of init expression
+  Env::object_env->exitscope();
+
+  if (init->get_type() == ERR_type)
+    return; // If init is ERR_type, just return
+  if ((init->get_type() != No_type) && !ClassTable::check_subtype(attr_type, init->get_type()))
+    ClassTable::semant_error(Env::cur_class) << "Type " << init->get_type() << " is not equal to or a subtype of " << attr_type << endl;
+  return;
 }
 
 void method_class::type_check()
 {
+  // TODO:
 }
+
+void object_class::type_check()
+{
+  if (Symbol result = Env::object_env->lookup(name))
+    set_type(result);
+  else
+  {
+    ClassTable::semant_error(Env::cur_class) << "Undeclared identifier " << name << endl;
+    set_type(ERR_type);
+  }
+  return;
+}
+
+void assign_class::type_check()
+{
+  Symbol id_type = Env::object_env->lookup(name);
+  if (!id_type)
+  {
+    ClassTable::semant_error(Env::cur_class) << "Undeclared identifier " << name << endl;
+    set_type(ERR_type);
+    return;
+  }
+
+  Env::object_env->enterscope();
+  expr->type_check();
+  Env::object_env->exitscope();
+
+  if (expr->get_type() == ERR_type) // If expr is ERR_type, the whole assign_class is ERR_type
+  {
+    set_type(ERR_type);
+    return;
+  }
+  if (expr->get_type() == No_type) // Cannot assign No_type
+  {
+    ClassTable::semant_error(Env::cur_class) << "Cannot assign No_type to " << name << endl;
+    set_type(ERR_type);
+    return;
+  }
+  if (!ClassTable::check_subtype(id_type, expr->get_type()))
+  {
+    ClassTable::semant_error(Env::cur_class) << "Type " << expr->get_type() << " is not equal to or a subtype of " << id_type << endl;
+    set_type(ERR_type);
+    return;
+  }
+  set_type(expr->get_type());
+}
+
+void bool_const_class::type_check() { set_type(Bool); }
+
+void int_const_class::type_check() { set_type(Int); }
+
+void string_const_class::type_check() { set_type(Str); }
+
+void new__class::type_check()
+{
+  if (type_name == SELF_TYPE)
+  {
+    set_type(Env::cur_class->getName());
+    return;
+  }
+
+  if (Symbol result = Env::object_env->lookup(type_name))
+    set_type(result);
+  else
+  {
+    ClassTable::semant_error(Env::cur_class) << "Undeclared identifier " << type_name << endl;
+    set_type(ERR_type);
+  }
+  return;
+}
+
+void dispatch_class::type_check()
+{
+  // type_check of e0
+  Symbol e0_type = expr->get_type() == SELF_TYPE ? Env::cur_class->getName() : expr->get_type();
+  if (e0_type == ERR_type) // If e0 is ERR_type, the whole dispatch_class is ERR_type
+  {
+    set_type(ERR_type);
+    return;
+  }
+  else if (e0_type == No_type) // Cannot dispatch on No_type
+  {
+    ClassTable::semant_error(Env::cur_class) << "Cannot dispatch on No_type" << endl;
+    set_type(ERR_type);
+    return;
+  }
+
+  // type_check of the dispatched method
+  std::map<std::pair<Symbol, Symbol>, std::vector<Symbol> *>::iterator it = Env::method_map->find(std::make_pair(e0_type, name));
+  if (it == Env::method_map->end())
+  {
+    ClassTable::semant_error(Env::cur_class) << "Undeclared method " << name << " in class " << e0_type << endl;
+    set_type(ERR_type);
+    return;
+  }
+  // type_check of the actual arguments
+  std::vector<Symbol> *formal_types = it->second;
+  if (formal_types->size() - 1 != (long unsigned int)actual->len())
+  {
+    ClassTable::semant_error(Env::cur_class) << "Wrong number of arguments for method " << name << " in class " << e0_type << endl;
+    set_type(ERR_type);
+    return;
+  }
+  for (int i = actual->first(); actual->more(i); i = actual->next(i))
+  {
+    actual->nth(i)->type_check();
+    if (actual->nth(i)->get_type() == ERR_type)
+    {
+      set_type(ERR_type);
+      return;
+    }
+    if (!ClassTable::check_subtype(formal_types->at(i), actual->nth(i)->get_type()))
+    {
+      ClassTable::semant_error(Env::cur_class) << "Type " << actual->nth(i)->get_type() << " is not equal to or a subtype of " << formal_types->at(i) << endl;
+      set_type(ERR_type);
+      return;
+    }
+  }
+
+  // type_check of return type
+  Symbol return_type = formal_types->back();
+  set_type(return_type == SELF_TYPE ? e0_type : return_type);
+  return;
+}
+
+void static_dispatch_class::type_check()
+{
+  // type_check of e0 and T
+  Symbol e0_type = expr->get_type();
+  Symbol T_type = type_name;
+  if (e0_type == ERR_type) // If e0 is ERR_type, the whole dispatch_class is ERR_type
+  {
+    set_type(ERR_type);
+    return;
+  }
+  else if (e0_type == No_type || T_type == No_type) // Cannot dispatch on No_type
+  {
+    ClassTable::semant_error(Env::cur_class) << "Cannot dispatch on No_type" << endl;
+    set_type(ERR_type);
+    return;
+  }
+  // check subtyping of e0 and T
+  if (!ClassTable::check_subtype(T_type, e0_type))
+  {
+    ClassTable::semant_error(Env::cur_class) << "Type " << e0_type << " is not equal to or a subtype of " << T_type << endl;
+    set_type(ERR_type);
+    return;
+  }
+
+  // type_check of the dispatched method
+  std::map<std::pair<Symbol, Symbol>, std::vector<Symbol> *>::iterator it = Env::method_map->find(std::make_pair(T_type, name));
+  if (it == Env::method_map->end())
+  {
+    ClassTable::semant_error(Env::cur_class) << "Undeclared method " << name << " in class " << T_type << endl;
+    set_type(ERR_type);
+    return;
+  }
+  // type_check of the actual arguments
+  std::vector<Symbol> *formal_types = it->second;
+  if (formal_types->size() - 1 != (long unsigned int)actual->len())
+  {
+    ClassTable::semant_error(Env::cur_class) << "Wrong number of arguments for method " << name << " in class " << T_type << endl;
+    set_type(ERR_type);
+    return;
+  }
+  for (int i = actual->first(); actual->more(i); i = actual->next(i))
+  {
+    actual->nth(i)->type_check();
+    if (actual->nth(i)->get_type() == ERR_type)
+    {
+      set_type(ERR_type);
+      return;
+    }
+    if (!ClassTable::check_subtype(formal_types->at(i), actual->nth(i)->get_type()))
+    {
+      ClassTable::semant_error(Env::cur_class) << "Type " << actual->nth(i)->get_type() << " is not equal to or a subtype of " << formal_types->at(i) << endl;
+      set_type(ERR_type);
+      return;
+    }
+  }
+
+  // type_check of return type
+  Symbol return_type = formal_types->back();
+  set_type(return_type == SELF_TYPE ? e0_type : return_type);
+  return;
+}
+
+void cond_class::type_check()
+{
+  pred->type_check();
+  if (pred->get_type() != Bool)
+  {
+    ClassTable::semant_error(Env::cur_class) << "Condition of if statement is not a bool" << endl;
+    set_type(ERR_type);
+    return;
+  }
+
+  then_exp->type_check();
+  else_exp->type_check();
+
+  if (then_exp->get_type() == ERR_type || else_exp->get_type() == ERR_type)
+  {
+    set_type(ERR_type);
+    return;
+  }
+  if (then_exp->get_type() == No_type || else_exp->get_type() == No_type)
+  {
+    ClassTable::semant_error(Env::cur_class) << "Then or else expression cannot be No_type in if statement" << endl;
+    set_type(ERR_type);
+    return;
+  }
+  set_type(ClassTable::get_LCA(then_exp->get_type(), else_exp->get_type()));
+}
+
+void block_class::type_check()
+{
+  int i = body->first();
+  for (i; body->more(i); i = body->next(i)) // do type-checking for all expressions in the block
+    body->nth(i)->type_check();
+  set_type(body->nth(i)->get_type());
+}
+
+void no_expr_class::type_check() { set_type(No_type); }
 
 ////////////////////////////////////////////////////////////////////
 //

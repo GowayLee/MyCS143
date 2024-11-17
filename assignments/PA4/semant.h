@@ -57,14 +57,14 @@ public:
   static SymbolTable<Symbol, std::vector<Symbol>> *method_env;                   // <object-identifier, Type>
   static std::map<std::pair<Symbol, Symbol>, Symbol> *attr_map;                  // <<class-name, method-name>, Type-list>
   static std::map<std::pair<Symbol, Symbol>, std::vector<Symbol> *> *method_map; // <<class-name, method-name>, Type-list>
-  static Symbol cur_class_name;
+  static Class_ cur_class;
 };
 
 SymbolTable<Symbol, Entry> *Env::object_env = new SymbolTable<Symbol, Entry>();
 SymbolTable<Symbol, std::vector<Symbol>> *Env::method_env = new SymbolTable<Symbol, std::vector<Symbol>>();
 std::map<std::pair<Symbol, Symbol>, Symbol> *Env::attr_map = new std::map<std::pair<Symbol, Symbol>, Symbol>();
 std::map<std::pair<Symbol, Symbol>, std::vector<Symbol> *> *Env::method_map = new std::map<std::pair<Symbol, Symbol>, std::vector<Symbol> *>();
-Symbol Env::cur_class_name = (Symbol)NULL;
+Class_ Env::cur_class = (Class_)NULL;
 
 // This is a structure that may be used to contain the semantic
 // information such as the inheritance graph.  You may use it or not as
@@ -96,6 +96,8 @@ public:
   static List<Class__class> *get_ancestors(Class_ cur_class);
   static int install_features(Classes classes);
   static int setup_environment(Class_ cur_class);
+  static bool check_subtype(Symbol type1, Symbol type2);
+  static Symbol get_LCA(Symbol type1, Symbol type2);
 };
 
 std::map<Symbol, InheritanceGraphNode *> *ClassTable::class_map = new std::map<Symbol, InheritanceGraphNode *>();

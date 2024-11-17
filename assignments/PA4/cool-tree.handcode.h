@@ -132,4 +132,73 @@ typedef Cases_class *Cases;
 #define assign_EXTRAS \
   void type_check();
 
+#define static_dispatch_EXTRAS \
+  void type_check();
+
+#define dispatch_EXTRAS \
+  void type_check();
+
+#define cond_EXTRAS \
+  void type_check();
+
+#define loop_EXTRAS \
+  void type_check();
+
+#define typcase_EXTRAS \
+  void type_check();
+
+#define block_EXTRAS \
+  void type_check();
+
+#define let_EXTRAS \
+  void type_check();
+
+#define plus_EXTRAS \
+  void type_check();
+
+#define sub_EXTRAS \
+  void type_check();
+
+#define mul_EXTRAS \
+  void type_check();
+
+#define divide_EXTRAS \
+  void type_check();
+
+#define neg_EXTRAS \
+  void type_check();
+
+#define lt_EXTRAS \
+  void type_check();
+
+#define eq_EXTRAS \
+  void type_check();
+
+#define leq_EXTRAS \
+  void type_check();
+
+#define comp_EXTRAS \
+  void type_check();
+
+#define int_const_EXTRAS \
+  void type_check();
+
+#define bool_const_EXTRAS \
+  void type_check();
+
+#define string_const_EXTRAS \
+  void type_check();
+
+#define new__EXTRAS \
+  void type_check();
+
+#define isvoid_EXTRAS \
+  void type_check();
+
+#define no_expr_EXTRAS \
+  void type_check();
+
+#define object_EXTRAS \
+  void type_check();
+
 #endif
