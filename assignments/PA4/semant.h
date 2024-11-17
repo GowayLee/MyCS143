@@ -58,6 +58,7 @@ public:
   static std::map<std::pair<Symbol, Symbol>, Symbol> *attr_map;                  // <<class-name, method-name>, Type-list>
   static std::map<std::pair<Symbol, Symbol>, std::vector<Symbol> *> *method_map; // <<class-name, method-name>, Type-list>
   static Class_ cur_class;
+  static std::map<Symbol, InheritanceGraphNode *> *class_map; // Maintain Symbol->InheritanceNode map to speed up the search
 };
 
 SymbolTable<Symbol, Entry> *Env::object_env = new SymbolTable<Symbol, Entry>();
@@ -65,6 +66,7 @@ SymbolTable<Symbol, std::vector<Symbol>> *Env::method_env = new SymbolTable<Symb
 std::map<std::pair<Symbol, Symbol>, Symbol> *Env::attr_map = new std::map<std::pair<Symbol, Symbol>, Symbol>();
 std::map<std::pair<Symbol, Symbol>, std::vector<Symbol> *> *Env::method_map = new std::map<std::pair<Symbol, Symbol>, std::vector<Symbol> *>();
 Class_ Env::cur_class = (Class_)NULL;
+std::map<Symbol, InheritanceGraphNode *> *Env::class_map = new std::map<Symbol, InheritanceGraphNode *>();
 
 // This is a structure that may be used to contain the semantic
 // information such as the inheritance graph.  You may use it or not as
@@ -75,7 +77,6 @@ class ClassTable
 {
 private:
   InheritanceGraph *inheritance_graph;
-  static std::map<Symbol, InheritanceGraphNode *> *class_map; // Maintain Symbol->InheritanceNode map to speed up the search
 
   static int semant_errors;
   static ostream &error_stream;
@@ -100,7 +101,6 @@ public:
   static Symbol get_LCA(Symbol type1, Symbol type2);
 };
 
-std::map<Symbol, InheritanceGraphNode *> *ClassTable::class_map = new std::map<Symbol, InheritanceGraphNode *>();
 int ClassTable::semant_errors = 0;
 ostream &ClassTable::error_stream = cerr;
 

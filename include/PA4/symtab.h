@@ -109,6 +109,8 @@ public:
        if (tbl == NULL) {
 	   fatal_error("exitscope: Can't remove scope from an empty symbol table.");
        }
+       ScopeList *tmp = tbl;
+       delete tmp;
        tbl = tbl->tl();
    }
 
@@ -163,7 +165,13 @@ public:
          }
       }
    }
- 
+
+    // Deconstructor
+    inline ~SymbolTable()
+    {
+        while(tbl) 
+            exitscope();
+    }
 };
 
 #endif

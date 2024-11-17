@@ -137,6 +137,7 @@ int InheritanceGraph::construct_tree()
     leaf_map = new_leaf_map;
     new_leaf_map = temp_ptr;
   }
+  delete new_leaf_map, leaf_map;
 
   if (free_node_set->size() != 0)
     // indicate that there have classe(s) with non-defined parent
@@ -170,7 +171,7 @@ void ClassTable::check_inheritance_graph(Classes classes)
       continue;
     }
     // Load cur_class to class_map.
-    class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(name, new InheritanceGraphNode(cur_class)));
+    Env::class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(name, new InheritanceGraphNode(cur_class)));
   }
   // Construct graph based on free_node_set, check the rest of rules
   if (inheritance_graph->construct_tree())
@@ -215,6 +216,7 @@ void ClassTable::analysis_inheritance_error()
     // Clean up checked classes
     free_node_set->erase(temp_node_set->begin(), temp_node_set->end());
   }
+  delete temp_node_set;
 }
 
 /*----------------------------------------------------------------------------------.
@@ -324,23 +326,23 @@ void ClassTable::install_basic_classes()
 
   InheritanceGraphNode *Object_node = new InheritanceGraphNode(Object_class);
   this->inheritance_graph->setRoot(Object_node); // Object class is the root of the inheritance graph.
-  class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(Object, Object_node));
+  Env::class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(Object, Object_node));
 
   InheritanceGraphNode *IO_node = new InheritanceGraphNode(IO_class);
   IO_node->setParent(Object_node);
-  class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(IO, IO_node));
+  Env::class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(IO, IO_node));
 
   InheritanceGraphNode *Int_node = new InheritanceGraphNode(Int_class);
   Int_node->setParent(Object_node);
-  class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(Int, Int_node));
+  Env::class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(Int, Int_node));
 
   InheritanceGraphNode *Bool_node = new InheritanceGraphNode(Bool_class);
   Bool_node->setParent(Object_node);
-  class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(Bool, Bool_node));
+  Env::class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(Bool, Bool_node));
 
   InheritanceGraphNode *Str_node = new InheritanceGraphNode(Str_class);
   Str_node->setParent(Object_node);
-  class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(Str, Str_node));
+  Env::class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(Str, Str_node));
 }
 
 // Install methods into method_env and check main class and main method.
@@ -398,6 +400,7 @@ int ClassTable::install_features(Classes classes)
       }
     }
   }
+  delete method_set, attr_set;
 
   if (!check_main_class)
     semant_error() << "Main class is missing." << endl;
@@ -414,7 +417,7 @@ List<Class__class> *ClassTable::get_ancestors(Class_ cur_class)
 {
   // Initialize List and append cur_class
   List<Class__class> *ancestors = new List<Class__class>(cur_class, (List<Class__class> *)NULL);
-  InheritanceGraphNode *cur_node = (*class_map)[cur_class->getName()];
+  InheritanceGraphNode *cur_node = (*Env::class_map)[cur_class->getName()];
   while (cur_node->getParent()) // Stop when reach root
     ancestors = new List<Class__class>((cur_node = cur_node->getParent())->getClass(), ancestors);
   return ancestors;
@@ -424,11 +427,11 @@ int ClassTable::setup_environment(Class_ cur_class)
 {
   int state = 0;
   // Initalize object_env and method_env
-  // TODO: memory free
+  // Memory free done in outer scope(in program_class::type_check())
   Env::object_env = new SymbolTable<Symbol, Entry>();
   Env::method_env = new SymbolTable<Symbol, std::vector<Symbol>>();
   // Set up type environments
-  List<Class__class> *ancestors = get_ancestors(cur_class); // TODO: Memory free
+  List<Class__class> *ancestors = get_ancestors(cur_class);
   Env::object_env->enterscope();
   Env::method_env->enterscope();
   Env::cur_class = cur_class;
@@ -475,6 +478,7 @@ int ClassTable::setup_environment(Class_ cur_class)
           continue;
         }
         Env::method_env->addid(curr_method->getName(), arg_types);
+        delete arg_types;
       }
       else
       {
@@ -490,6 +494,7 @@ int ClassTable::setup_environment(Class_ cur_class)
       }
     }
   }
+  delete ancestors;
   return state;
 }
 
@@ -502,14 +507,14 @@ bool ClassTable::check_subtype(Symbol type1, Symbol type2)
     return false;
   // Check existence of both types
   std::map<Symbol, InheritanceGraphNode *>::iterator it;
-  if (type1 != Object && (it = class_map->find(type1)) == class_map->end()) // Cannot find type1 in class_map
+  if ((it = Env::class_map->find(type1)) == Env::class_map->end()) // Cannot find type1 in class_map
   {
-    semant_error(Env::cur_class) << "Type " << type1 << " is undefined." << endl;
+    semant_error(Env::cur_class) << "Type " << type1 << " is undeclared." << endl;
     return false;
   }
-  if ((it = class_map->find(type2)) == class_map->end()) // Cannot find type2 in class_map
+  if ((it = Env::class_map->find(type2)) == Env::class_map->end()) // Cannot find type2 in class_map
   {
-    semant_error(Env::cur_class) << "Type " << type2 << " is undefined." << endl;
+    semant_error(Env::cur_class) << "Type " << type2 << " is undeclared." << endl;
     return false;
   }
 
@@ -536,14 +541,14 @@ Symbol ClassTable::get_LCA(Symbol type1, Symbol type2)
   // check the existence of both types
   std::map<Symbol, InheritanceGraphNode *>::iterator it1;
   std::map<Symbol, InheritanceGraphNode *>::iterator it2;
-  if ((it1 = class_map->find(type1)) == class_map->end()) // Cannot find type1 in class_map
+  if ((it1 = Env::class_map->find(type1)) == Env::class_map->end()) // Cannot find type1 in class_map
   {
-    semant_error(Env::cur_class) << "Type " << type1 << " is undefined." << endl;
+    semant_error(Env::cur_class) << "Type " << type1 << " is undeclared." << endl;
     return ERR_type;
   }
-  if ((it2 = class_map->find(type2)) == class_map->end()) // Cannot find type2 in class_map
+  if ((it2 = Env::class_map->find(type2)) == Env::class_map->end()) // Cannot find type2 in class_map
   {
-    semant_error(Env::cur_class) << "Type " << type2 << " is undefined." << endl;
+    semant_error(Env::cur_class) << "Type " << type2 << " is undeclared." << endl;
     return ERR_type;
   }
 
@@ -570,13 +575,14 @@ Symbol ClassTable::get_LCA(Symbol type1, Symbol type2)
     path2 = new List<Class__class>(ptr->getClass(), path2);
   }
   // type1 and type2 are on the different path
-  for (path1, path2; path1->tl()->tl() && path2->tl()->tl(); path1 = path1->tl(), path2 = path2->tl())
-    if (path1->tl()->hd() != path2->tl()->hd())
+  for (List<Class__class> *ptr1 = path1, *ptr2 = path2; ptr1->tl()->tl() && ptr2->tl()->tl(); ptr1 = ptr1->tl(), ptr2 = ptr2->tl())
+    if (ptr1->tl()->hd() != ptr2->tl()->hd())
     {
-      Symbol result = path1->hd()->getName();
-      delete path1, path2;
+      Symbol result = ptr1->hd()->getName();
+      delete path1, path2; // Need to delte from head of the List
       return result;
     }
+  return ERR_type; // Actually, this line should never be reached
 }
 
 
@@ -593,6 +599,7 @@ void program_class::type_check()
     if (ClassTable::setup_environment(classes->nth(i)))
       continue;
     classes->nth(i)->type_check(); // Traverse tree and get all nodes type checked
+    delete Env::object_env, Env::method_env;
   }
 }
 
@@ -628,16 +635,18 @@ void method_class::type_check()
   // TODO:
 }
 
+/////////////////////////////////////////////////////////////////
+// Start type-checking on all sub-classes of expression_class //
+////////////////////////////////////////////////////////////////
 void object_class::type_check()
 {
-  if (Symbol result = Env::object_env->lookup(name))
+  if (Symbol result = Env::object_env->lookup(name)) // check context in object identifier environment
     set_type(result);
   else
   {
     ClassTable::semant_error(Env::cur_class) << "Undeclared identifier " << name << endl;
     set_type(ERR_type);
   }
-  return;
 }
 
 void assign_class::type_check()
@@ -669,7 +678,6 @@ void assign_class::type_check()
   {
     ClassTable::semant_error(Env::cur_class) << "Type " << expr->get_type() << " is not equal to or a subtype of " << id_type << endl;
     set_type(ERR_type);
-    return;
   }
   set_type(expr->get_type());
 }
@@ -688,11 +696,11 @@ void new__class::type_check()
     return;
   }
 
-  if (Symbol result = Env::object_env->lookup(type_name))
-    set_type(result);
+  if (Env::class_map->find(type_name) != Env::class_map->end())
+    set_type(type_name);
   else
   {
-    ClassTable::semant_error(Env::cur_class) << "Undeclared identifier " << type_name << endl;
+    ClassTable::semant_error(Env::cur_class) << "Undeclared type " << type_name << endl;
     set_type(ERR_type);
   }
   return;
@@ -701,6 +709,10 @@ void new__class::type_check()
 void dispatch_class::type_check()
 {
   // type_check of e0
+  Env::object_env->enterscope();
+  expr->type_check();
+  Env::object_env->exitscope();
+
   Symbol e0_type = expr->get_type() == SELF_TYPE ? Env::cur_class->getName() : expr->get_type();
   if (e0_type == ERR_type) // If e0 is ERR_type, the whole dispatch_class is ERR_type
   {
@@ -732,7 +744,10 @@ void dispatch_class::type_check()
   }
   for (int i = actual->first(); actual->more(i); i = actual->next(i))
   {
+    Env::object_env->enterscope();
     actual->nth(i)->type_check();
+    Env::object_env->exitscope();
+
     if (actual->nth(i)->get_type() == ERR_type)
     {
       set_type(ERR_type);
@@ -755,6 +770,10 @@ void dispatch_class::type_check()
 void static_dispatch_class::type_check()
 {
   // type_check of e0 and T
+  Env::object_env->enterscope();
+  expr->type_check();
+  Env::object_env->exitscope();
+
   Symbol e0_type = expr->get_type();
   Symbol T_type = type_name;
   if (e0_type == ERR_type) // If e0 is ERR_type, the whole dispatch_class is ERR_type
@@ -794,7 +813,10 @@ void static_dispatch_class::type_check()
   }
   for (int i = actual->first(); actual->more(i); i = actual->next(i))
   {
+    Env::object_env->enterscope();
     actual->nth(i)->type_check();
+    Env::object_env->exitscope();
+
     if (actual->nth(i)->get_type() == ERR_type)
     {
       set_type(ERR_type);
@@ -816,16 +838,24 @@ void static_dispatch_class::type_check()
 
 void cond_class::type_check()
 {
+  Env::object_env->enterscope();
   pred->type_check();
+  Env::object_env->exitscope();
+
   if (pred->get_type() != Bool)
   {
-    ClassTable::semant_error(Env::cur_class) << "Condition of if statement is not a bool" << endl;
+    ClassTable::semant_error(Env::cur_class) << "COND expression of If statement is not a bool" << endl;
     set_type(ERR_type);
     return;
   }
 
+  Env::object_env->enterscope();
   then_exp->type_check();
+  Env::object_env->exitscope();
+
+  Env::object_env->enterscope();
   else_exp->type_check();
+  Env::object_env->exitscope();
 
   if (then_exp->get_type() == ERR_type || else_exp->get_type() == ERR_type)
   {
@@ -834,7 +864,7 @@ void cond_class::type_check()
   }
   if (then_exp->get_type() == No_type || else_exp->get_type() == No_type)
   {
-    ClassTable::semant_error(Env::cur_class) << "Then or else expression cannot be No_type in if statement" << endl;
+    ClassTable::semant_error(Env::cur_class) << "THEN or ELSE expression cannot be No_type in If statement" << endl;
     set_type(ERR_type);
     return;
   }
