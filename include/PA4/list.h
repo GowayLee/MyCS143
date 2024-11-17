@@ -32,6 +32,8 @@ public:
 
   T *hd() const       { return head; }  
   List<T>* tl() const { return tail; }
+  // Deconstructor
+  ~List();
 };
 
 /////////////////////////////////////////////////////////////////////////
@@ -77,6 +79,13 @@ int list_length(List<T> *l)
   for (; l != NULL; l = l->tl())
     i++;
   return i;
+}
+
+template <class T>
+inline List<T>::~List() // delete the list recursively
+{
+  delete hd();
+  delete tl();
 }
 
 #endif
