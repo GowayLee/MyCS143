@@ -111,7 +111,10 @@ typedef Cases_class *Cases;
   virtual void dump_with_types(ostream &, int) = 0;
 
 #define branch_EXTRAS \
-  void dump_with_types(ostream &, int);
+  void dump_with_types(ostream &, int); \
+  Symbol getName() { return name; } \
+  Symbol getTypeDecl() { return type_decl; } \
+  Expression getExpr() { return expr; }
 
 #define Expression_EXTRAS                           \
   Symbol type;                                      \

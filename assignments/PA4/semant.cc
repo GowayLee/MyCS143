@@ -532,6 +532,16 @@ bool ClassTable::check_subtype(Symbol type1, Symbol type2)
   return false;
 }
 
+Symbol ClassTable::get_LCA(std::vector<Symbol> *type_list)
+{
+  if (type_list->size() == 1)
+    return (*type_list)[0];
+  Symbol prev_type = (*type_list)[0];
+  for (Symbol cur_type : *type_list)
+    prev_type = get_LCA(prev_type, cur_type);
+  return prev_type;
+}
+
 // Return LCA type of type1 and type2
 Symbol ClassTable::get_LCA(Symbol type1, Symbol type2)
 {
@@ -618,8 +628,8 @@ void attr_class::type_check()
 {
   Symbol attr_type = (getType() == SELF_TYPE) ? Env::cur_class->getName() : getType();
 
-  Env::object_env->enterscope(); // Set up a new scope with SELF_TYPE = self
-  Env::object_env->addid(SELF_TYPE, self);
+  Env::object_env->enterscope(); // Set up a new scope with self = SELF_TYPE
+  Env::object_env->addid(self, Env::cur_class->getName());
   init->type_check(); // Check the type of init expression
   Env::object_env->exitscope();
 
@@ -627,12 +637,25 @@ void attr_class::type_check()
     return; // If init is ERR_type, just return
   if ((init->get_type() != No_type) && !ClassTable::check_subtype(attr_type, init->get_type()))
     ClassTable::semant_error(Env::cur_class) << "Type " << init->get_type() << " is not equal to or a subtype of " << attr_type << endl;
-  return;
 }
 
 void method_class::type_check()
 {
-  // TODO:
+  // Assert all the methods have been installed into the method_map
+  std::vector<Symbol> *arg_types = Env::method_map->find(std::make_pair(Env::cur_class->getName(), name))->second;
+  
+  // Set up a new scope with self and all the arguments
+  Env::object_env->enterscope();
+  Env::object_env->addid(self, Env::cur_class->getName());
+  for (int i = formals->first(); formals->more(i); i = formals->next(i))
+    Env::object_env->addid(formals->nth(i)->getName(), formals->nth(i)->getType());
+  expr->type_check();
+  Env::object_env->exitscope();
+
+  if (expr->get_type() == ERR_type)
+    return; // If expr is ERR_type, just return
+  if (!ClassTable::check_subtype(arg_types->back(), expr->get_type()))
+    ClassTable::semant_error(Env::cur_class) << "Type " << expr->get_type() << " is not equal to or a subtype of " << arg_types->back() << endl;
 }
 
 /////////////////////////////////////////////////////////////////
@@ -658,6 +681,7 @@ void assign_class::type_check()
     set_type(ERR_type);
     return;
   }
+  // TODO: Can assign to identifier `self` ?
 
   Env::object_env->enterscope();
   expr->type_check();
@@ -875,8 +899,348 @@ void block_class::type_check()
 {
   int i = body->first();
   for (i; body->more(i); i = body->next(i)) // do type-checking for all expressions in the block
+  {
+    Env::object_env->enterscope();
     body->nth(i)->type_check();
+    Env::object_env->exitscope();
+  }
+
+  if (body->nth(i)->get_type() == ERR_type)
+  {
+    set_type(ERR_type);
+    return;
+  }
   set_type(body->nth(i)->get_type());
+}
+
+void let_class::type_check()
+{
+  // do type-checking for identifier
+  if (type_decl == No_type)
+  {
+    ClassTable::semant_error(Env::cur_class) << "Type of variable " << identifier << " is not declared" << endl;
+    set_type(ERR_type);
+    return;
+  }
+  Symbol id_type;
+  if (type_decl == SELF_TYPE)
+    id_type = Env::cur_class->getName();
+  
+  // do type-checking for init
+  Env::object_env->enterscope();
+  init->type_check();
+  Env::object_env->exitscope();
+
+  Symbol init_type = init->get_type();
+  if (init_type == ERR_type)
+  {
+    set_type(ERR_type);
+    return;
+  }
+  if (init_type != No_type) // in Let-No-Init, init is No_type, no need to check subtype
+  {
+    if (!ClassTable::check_subtype(id_type, init_type))
+    {
+      ClassTable::semant_error(Env::cur_class) << "Type " << init_type << " is not equal to or a subtype of " << id_type << endl;
+      set_type(ERR_type);
+      return;
+    }
+  }
+
+  // add identifier to object environment
+  Env::object_env->enterscope();
+  Env::object_env->addid(identifier, id_type);
+  body->type_check();
+  Env::object_env->exitscope();
+
+  set_type(body->get_type());
+}
+
+void typcase_class::type_check()
+{
+  // do type-checking for expr
+  Env::object_env->enterscope();
+  expr->type_check();
+  Env::object_env->exitscope();
+
+  if (expr->get_type() == ERR_type)
+  {
+    set_type(ERR_type);
+    return;
+  }
+  if (expr->get_type() == No_type)
+  {
+    ClassTable::semant_error(Env::cur_class) << "Expression of case statement cannot be No_type" << endl;
+    set_type(ERR_type);
+    return;
+  }
+  Symbol expr_type = expr->get_type();
+
+  // do type-checking for cases
+  std::vector<Symbol> *branch_types = new std::vector<Symbol>();
+  for (int i = cases->first(); cases->more(i); i = cases->next(i))
+  {
+    branch_class *branch = static_cast<branch_class *>(cases->nth(i));
+    if (Env::class_map->find(branch->getTypeDecl()) == Env::class_map->end())
+    {
+      ClassTable::semant_error(Env::cur_class);
+      set_type(ERR_type);
+      return;
+    }
+
+    Env::object_env->enterscope();
+    Env::object_env->addid(branch->getName(), branch->getTypeDecl());
+    branch->getExpr()->type_check();
+    Env::object_env->exitscope();
+
+    if (branch->getExpr()->get_type() == ERR_type)
+    {
+      set_type(ERR_type);
+      return;
+    }
+    branch_types->push_back(branch->getExpr()->get_type());
+  }
+  
+  // get LCA
+  set_type(ClassTable::get_LCA(branch_types));
+  delete branch_types;
+}
+
+void loop_class::type_check()
+{
+  // do type-checking for pred
+  Env::object_env->enterscope();
+  pred->type_check();
+  Env::object_env->exitscope();
+
+  if (pred->get_type() != Bool)
+  {
+    if (pred->get_type() != ERR_type)
+      ClassTable::semant_error(Env::cur_class) << "Predicate of loop statement is not of type Bool" << endl;
+    set_type(ERR_type);
+    return;
+  }
+
+  // do type-checking for body
+  Env::object_env->enterscope();
+  body->type_check();
+  Env::object_env->exitscope();
+  
+  if (body->get_type() == ERR_type)
+  {
+    set_type(ERR_type);
+    return;
+  }
+  set_type(Object);
+}
+
+void isvoid_class::type_check()
+{
+  // do type-checking for e1
+  Env::object_env->enterscope();
+  e1->type_check();
+  Env::object_env->exitscope();
+
+  if (e1->get_type() == ERR_type)
+  {
+    set_type(ERR_type);
+    return;
+  }
+  set_type(Bool);
+}
+
+void comp_class::type_check()
+{
+  // do type-checking for e1
+  Env::object_env->enterscope();
+  e1->type_check();
+  Env::object_env->exitscope();
+
+  if (e1->get_type() != Bool)
+  {
+    if (e1->get_type() != ERR_type)
+      ClassTable::semant_error(Env::cur_class) << "Expression of comp statement is not of type Bool" << endl;
+    set_type(ERR_type);
+    return;
+  }
+  set_type(Bool);
+}
+
+void lt_class::type_check()
+{
+  // do type-checking for e1, e2
+  Env::object_env->enterscope();
+  e1->type_check();
+  Env::object_env->exitscope();
+
+  Env::object_env->enterscope();
+  e2->type_check();
+  Env::object_env->exitscope();
+
+  if (e1->get_type() != Int || e2->get_type() != Int)
+  {
+    if (e1->get_type() != ERR_type && e2->get_type() != ERR_type)
+      ClassTable::semant_error(Env::cur_class) << "Expression of lt statement is not of type Int" << endl;
+    set_type(ERR_type);
+    return;
+  }
+  set_type(Bool);
+}
+
+void leq_class::type_check()
+{
+  // do type-checking for e1, e2
+  Env::object_env->enterscope();
+  e1->type_check();
+  Env::object_env->exitscope();
+
+  Env::object_env->enterscope();
+  e2->type_check();
+  Env::object_env->exitscope();
+
+  if (e1->get_type() != Int || e2->get_type() != Int)
+  {
+    if (e1->get_type() != ERR_type && e2->get_type() != ERR_type)
+      ClassTable::semant_error(Env::cur_class) << "Expression of leq statement is not of type Int" << endl;
+    set_type(ERR_type);
+    return;
+  }
+  set_type(Bool);
+}
+
+void neg_class::type_check()
+{
+  // do type-checking for e1
+  Env::object_env->enterscope();
+  e1->type_check();
+  Env::object_env->exitscope();
+
+  if (e1->get_type() != Int)
+  {
+    if (e1->get_type() != ERR_type)
+      ClassTable::semant_error(Env::cur_class) << "Expression of neg statement is not of type Int" << endl;
+    set_type(ERR_type);
+    return;
+  }
+  set_type(Int);
+}
+
+void mul_class::type_check()
+{
+  // do type-checking for e1, e2
+  Env::object_env->enterscope();
+  e1->type_check();
+  Env::object_env->exitscope();
+
+  Env::object_env->enterscope();
+  e2->type_check();
+  Env::object_env->exitscope();
+
+  if (e1->get_type() != Int || e2->get_type() != Int)
+  {
+    if (e1->get_type() != ERR_type && e2->get_type() != ERR_type)
+      ClassTable::semant_error(Env::cur_class) << "Expression of mul statement is not of type Int" << endl;
+    set_type(ERR_type);
+    return;
+  }
+  set_type(Int);
+}
+
+void plus_class::type_check()
+{
+  // do type-checking for e1, e2
+  Env::object_env->enterscope();
+  e1->type_check();
+  Env::object_env->exitscope();
+
+  Env::object_env->enterscope();
+  e2->type_check();
+  Env::object_env->exitscope();
+
+  if (e1->get_type() != Int || e2->get_type() != Int)
+  {
+    if (e1->get_type() != ERR_type && e2->get_type() != ERR_type)
+      ClassTable::semant_error(Env::cur_class) << "Expression of plus statement is not of type Int" << endl;
+    set_type(ERR_type);
+    return;
+  }
+  set_type(Int);
+}
+
+void sub_class::type_check()
+{
+  // do type-checking for e1, e2
+  Env::object_env->enterscope();
+  e1->type_check();
+  Env::object_env->exitscope();
+
+  Env::object_env->enterscope();
+  e2->type_check();
+  Env::object_env->exitscope();
+
+  if (e1->get_type() != Int || e2->get_type() != Int)
+  {
+    if (e1->get_type() != ERR_type && e2->get_type() != ERR_type)
+      ClassTable::semant_error(Env::cur_class) << "Expression of sub statement is not of type Int" << endl;
+    set_type(ERR_type);
+    return;
+  }
+  set_type(Int);
+}
+
+void divide_class::type_check()
+{
+  // do type-checking for e1, e2
+  Env::object_env->enterscope();
+  e1->type_check();
+  Env::object_env->exitscope();
+
+  Env::object_env->enterscope();
+  e2->type_check();
+  Env::object_env->exitscope();
+
+  if (e1->get_type() != Int || e2->get_type() != Int)
+  {
+    if (e1->get_type() != ERR_type && e2->get_type() != ERR_type)
+      ClassTable::semant_error(Env::cur_class) << "Expression of divide statement is not of type Int" << endl;
+    set_type(ERR_type);
+    return;
+  }
+  set_type(Int);
+}
+
+void eq_class::type_check() {
+  // do type-checking for e1, e2
+  Env::object_env->enterscope();
+  e1->type_check();
+  Env::object_env->exitscope();
+  Symbol t = e1->get_type();
+  if (t != Int || t != Str || t != Bool)
+  {
+    ClassTable::semant_error(Env::cur_class) << "Expression of eq statement is not of type Int, Str or Bool";
+    set_type(ERR_type);
+    return;
+  }
+
+  Env::object_env->enterscope();
+  e2->type_check();
+  Env::object_env->exitscope();
+  t = e2->get_type();
+  if (t != Int || t != Str || t != Bool)
+  {
+    ClassTable::semant_error(Env::cur_class) << "Expression of eq statement is not of type Int, Str or Bool";
+    set_type(ERR_type);
+    return;
+  }
+
+  if (e1->get_type() != e2->get_type())
+  {
+    if (e1->get_type() != ERR_type && e2->get_type() != ERR_type)
+      ClassTable::semant_error(Env::cur_class) << "Expressions of eq statement have different types";
+    set_type(ERR_type);
+    return;
+  }
+  set_type(Bool);
 }
 
 void no_expr_class::type_check() { set_type(No_type); }
@@ -929,6 +1293,7 @@ ostream &ClassTable::semant_error()
 void program_class::semant()
 {
   initialize_constants();
+  std::cout << "finish initalizing constants" << endl;
 
   /* ClassTable constructor may do some semantic analysis */
   // Here, we decide to conduct Inheritance checking first, inside the ClassTable constructor.
@@ -939,6 +1304,7 @@ void program_class::semant()
     exit(1);
   }
 
+  std::cout << "finish constructing ClassTable" << endl;
   /* some semantic analysis code may go here */
   // Here, we conduct Type checking.
   type_check();

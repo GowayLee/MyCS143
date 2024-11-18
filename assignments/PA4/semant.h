@@ -99,6 +99,7 @@ public:
   static int setup_environment(Class_ cur_class);
   static bool check_subtype(Symbol type1, Symbol type2);
   static Symbol get_LCA(Symbol type1, Symbol type2);
+  static Symbol get_LCA(std::vector<Symbol> *type_list);
 };
 
 int ClassTable::semant_errors = 0;
