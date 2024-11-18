@@ -84,8 +84,7 @@ int list_length(List<T> *l)
 template <class T>
 inline List<T>::~List() // delete the list recursively
 {
-  // delete hd(); // Deconstructor do not delete what is pointed
-  delete tl();
+  delete tail;
 }
 
 #endif

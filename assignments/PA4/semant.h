@@ -40,7 +40,7 @@ private:
   std::set<InheritanceGraphNode *> *free_node_set;
 
 public:
-  InheritanceGraph() {};
+  InheritanceGraph() : root((InheritanceGraphNode *)NULL), free_node_set(new std::set<InheritanceGraphNode *>()){};
   void setRoot(InheritanceGraphNode *node) { root = node; }
   std::set<InheritanceGraphNode *> *getFreeNodeSet() { return free_node_set; }
   // Load classes in program into free_node_set
@@ -61,8 +61,8 @@ public:
   static std::map<Symbol, InheritanceGraphNode *> *class_map; // Maintain Symbol->InheritanceNode map to speed up the search
 };
 
-SymbolTable<Symbol, Entry> *Env::object_env = new SymbolTable<Symbol, Entry>();
-SymbolTable<Symbol, std::vector<Symbol>> *Env::method_env = new SymbolTable<Symbol, std::vector<Symbol>>();
+SymbolTable<Symbol, Entry> *Env::object_env = NULL;
+SymbolTable<Symbol, std::vector<Symbol>> *Env::method_env = NULL;
 std::map<std::pair<Symbol, Symbol>, Symbol> *Env::attr_map = new std::map<std::pair<Symbol, Symbol>, Symbol>();
 std::map<std::pair<Symbol, Symbol>, std::vector<Symbol> *> *Env::method_map = new std::map<std::pair<Symbol, Symbol>, std::vector<Symbol> *>();
 Class_ Env::cur_class = (Class_)NULL;

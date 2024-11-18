@@ -159,7 +159,7 @@ void ClassTable::check_inheritance_graph(Classes classes)
       semant_error(cur_class) << "Cannot redefine basic class: " << name << endl;
       continue;
     }
-    if (parent_name == IO || parent_name == Int || parent_name == Str || parent_name == Bool || parent_name == SELF_TYPE)
+    if (parent_name == Int || parent_name == Str || parent_name == Bool || parent_name == SELF_TYPE)
     {
       semant_error(cur_class) << "Cannot inherit from basic class: " << parent_name << endl;
       continue;
@@ -374,7 +374,7 @@ int ClassTable::install_features(Classes classes)
           semant_error(curr_class) << "Duplicate definition of method " << curr_method->getName() << "." << endl;
           continue;
         }
-        if (check_main_class && !check_main_method && curr_method->getName() == Main)
+        if (check_main_class && !check_main_method && curr_method->getName() == main_meth)
           check_main_method = true;
 
         Formals formals = curr_method->getFormals();
@@ -636,7 +636,13 @@ void attr_class::type_check()
   if (init->get_type() == ERR_type)
     return; // If init is ERR_type, just return
   if ((init->get_type() != No_type) && !ClassTable::check_subtype(attr_type, init->get_type()))
+  {
     ClassTable::semant_error(Env::cur_class) << "Type " << init->get_type() << " is not equal to or a subtype of " << attr_type << endl;
+    return;
+  }
+  
+  // Add new attribute to object_env
+  Env::object_env->addid(name, type_decl);
 }
 
 void method_class::type_check()
@@ -898,19 +904,21 @@ void cond_class::type_check()
 void block_class::type_check()
 {
   int i = body->first();
+  Expression last_expr;
   for (i; body->more(i); i = body->next(i)) // do type-checking for all expressions in the block
   {
     Env::object_env->enterscope();
-    body->nth(i)->type_check();
+    last_expr = body->nth(i);
+    last_expr->type_check();
     Env::object_env->exitscope();
   }
 
-  if (body->nth(i)->get_type() == ERR_type)
+  if (last_expr->get_type() == ERR_type)
   {
     set_type(ERR_type);
     return;
   }
-  set_type(body->nth(i)->get_type());
+  set_type(last_expr->get_type());
 }
 
 void let_class::type_check()
@@ -1293,7 +1301,6 @@ ostream &ClassTable::semant_error()
 void program_class::semant()
 {
   initialize_constants();
-  std::cout << "finish initalizing constants" << endl;
 
   /* ClassTable constructor may do some semantic analysis */
   // Here, we decide to conduct Inheritance checking first, inside the ClassTable constructor.
@@ -1304,7 +1311,6 @@ void program_class::semant()
     exit(1);
   }
 
-  std::cout << "finish constructing ClassTable" << endl;
   /* some semantic analysis code may go here */
   // Here, we conduct Type checking.
   type_check();
@@ -1314,4 +1320,6 @@ void program_class::semant()
     cerr << "Compilation halted due to static semantic errors." << endl;
     exit(1);
   }
+  
+  std::cout << "All semanteme have past checking!\nREADY TO GO!\n\nSyntax tree:\n";
 }
