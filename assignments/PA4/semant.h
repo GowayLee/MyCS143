@@ -44,7 +44,7 @@ public:
   void setRoot(InheritanceGraphNode *node) { root = node; }
   std::set<InheritanceGraphNode *> *getFreeNodeSet() { return free_node_set; }
   // Load classes in program into free_node_set
-  int add_free_node(Class_ c);
+  InheritanceGraphNode *add_free_node(Class_ c);
   // Build inheritance tree and leave classes with wrong inheritance into free_node_set
   int construct_tree();
 };
@@ -94,9 +94,9 @@ public:
   void check_inheritance_graph(Classes classes);
   // Anaylsis errors in the nonempty free_node_set
   void analysis_inheritance_error();
-  static List<Class__class> *get_ancestors(Class_ cur_class);
   static int install_features(Classes classes);
   static int setup_environment(Class_ cur_class);
+  static List<Class__class> *get_ancestors(Class_ cur_class);
   static bool check_subtype(Symbol type1, Symbol type2);
   static Symbol get_LCA(Symbol type1, Symbol type2);
   static Symbol get_LCA(std::vector<Symbol> *type_list);

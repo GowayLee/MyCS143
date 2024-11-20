@@ -90,13 +90,13 @@ ClassTable::ClassTable(Classes classes)
 }
 
 // Load classes in program into free_node_set
-int InheritanceGraph::add_free_node(Class_ c)
+InheritanceGraphNode *InheritanceGraph::add_free_node(Class_ c)
 {
   InheritanceGraphNode *node = new InheritanceGraphNode(c);
   if (free_node_set->find(node) != free_node_set->end()) // indicate that the class has been alredy exist
-    return 1;
+    return (InheritanceGraphNode *)NULL;
   free_node_set->insert(node);
-  return 0;
+  return node;
 }
 
 // Build inheritance tree and leave classes with wrong inheritance into free_node_set
@@ -107,8 +107,9 @@ int InheritanceGraph::construct_tree()
   std::map<Symbol, InheritanceGraphNode *> *new_leaf_map = new std::map<Symbol, InheritanceGraphNode *>;
   std::map<Symbol, InheritanceGraphNode *> *temp_ptr = NULL; // use in switch
 
-  // Set class Object as the first leaf of inheritance tree
+  // Set class Object and IO as the inital leaf of inheritance tree
   leaf_map->insert(std::pair<Symbol, InheritanceGraphNode *>(Object, root));
+  leaf_map->insert(std::pair<Symbol, InheritanceGraphNode *>(IO, Env::class_map->find(IO)->second));
   while (true)
   {
     new_leaf_map->clear();
@@ -165,13 +166,14 @@ void ClassTable::check_inheritance_graph(Classes classes)
       continue;
     }
     // Load cur_class to free_node_set, check duplicating defined, as well.
-    if (inheritance_graph->add_free_node(cur_class) == 1)
+    InheritanceGraphNode *new_node = inheritance_graph->add_free_node(cur_class);
+    if (!new_node)
     {
       semant_error(cur_class) << "Duplicate definition of class " << name << "." << endl;
       continue;
     }
     // Load cur_class to class_map.
-    Env::class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(name, new InheritanceGraphNode(cur_class)));
+    Env::class_map->insert(std::pair<Symbol, InheritanceGraphNode *>(name, new_node));
   }
   // Construct graph based on free_node_set, check the rest of rules
   if (inheritance_graph->construct_tree())
@@ -186,35 +188,60 @@ void ClassTable::analysis_inheritance_error()
   std::set<InheritanceGraphNode *> *free_node_set = inheritance_graph->getFreeNodeSet();
   std::set<InheritanceGraphNode *> *temp_node_set = new std::set<InheritanceGraphNode *>();
   // Find out undefined-parent inheritance
-  while (free_node_set->size() != 0)
+  while (free_node_set->size() > 0)
   {
+    temp_node_set->clear();
+
     ptr = *(free_node_set->begin());
-    std::set<InheritanceGraphNode *>::iterator it;
+    size_t max_it = free_node_set->size();
+    for (size_t i = 0; i < max_it; i++) // Find the most sub-class
+    {
+      bool is_found = true;
+      for (InheritanceGraphNode *cur_free_node : *free_node_set)
+      {
+        if (cur_free_node == ptr)
+          continue;
+        if (cur_free_node->getParentName() == ptr->getName())
+        {
+          ptr = cur_free_node; // Update ptr to the current checking class
+          is_found = false;
+          break;
+        }
+      }
+      if (is_found)
+        break;
+    }
+
+    std::map<Symbol, InheritanceGraphNode *>::iterator map_it;
     // Construct error message
-    std::string err_msg = strcat("  ->  class ", ptr->getName()->get_string()); // "  ->  class xxx"
+    std::string err_msg = ptr->getName()->get_string(); err_msg.insert(0, "  ->  class "); // "  ->  class xxx"
     temp_node_set->insert(ptr);
     // Collect all the ancestors of the current checking class and detect cyclic inheritance
-    while ((it = free_node_set->find(ptr->getParent())) != free_node_set->end())
+    while (true)
     {
-      ptr = *it;
-      err_msg.insert(0, strcat("  ->  class ", ptr->getName()->get_string())); // "  ->  class parent  ->  class child"
-      temp_node_set->insert(ptr);
-      if ((it = temp_node_set->find(ptr->getParent())) != temp_node_set->end())
+      // check whether the parent name has been declared
+      if (((map_it = Env::class_map->find(ptr->getParentName())) == Env::class_map->end()) || (free_node_set->find(map_it->second) == free_node_set->end()))
       {
-        ptr = *it;
-        // ">> Class child <<  ->  Class parent  ->  Class child"
-        err_msg.insert(0, strcat(strcat("Cyclic Inheritance exists: \n>> class ", ptr->getName()->get_string()), " <<"));
+        err_msg.insert(0, "\n\t?"); err_msg.insert(0, ptr->getParentName()->get_string()); err_msg.insert(0, "Undefined parent class: ");
         break;
       }
-    }
-    if (it == free_node_set->end()) // Find undefined parent
-    {
-      err_msg.insert(0, strcat(strcat("Undefined parent class: ", ptr->getParentName()->get_string()), "\n?"));
+      // check whether parent exists in free_node_set
+      ptr = *(free_node_set->find(map_it->second)); // Assert ptr exists in free_node_set
+      if (temp_node_set->find(ptr) != temp_node_set->end())
+      {
+        // ">> Class child <<  ->  Class parent  ->  Class child"
+        err_msg.insert(0, " <<"); err_msg.insert(0, ptr->getName()->get_string()); err_msg.insert(0, "Cyclic Inheritance exists: \n\t>> class ");
+        break;
+      }
+
+      err_msg.insert(0, ptr->getName()->get_string()); err_msg.insert(0, "  ->  class "); // "  ->  class parent  ->  class child"
+      temp_node_set->insert(ptr);
     }
     semant_error(ptr->getClass()) << err_msg << endl;
 
     // Clean up checked classes
-    free_node_set->erase(temp_node_set->begin(), temp_node_set->end());
+    for (InheritanceGraphNode *temp_node : *temp_node_set)
+      free_node_set->erase(temp_node);
   }
   delete temp_node_set;
 }
@@ -355,15 +382,15 @@ int ClassTable::install_features(Classes classes)
   std::set<Symbol> *method_set = new std::set<Symbol>(); // Maintain a set to detect duplicate definition of method in one class
   std::set<Symbol> *attr_set = new std::set<Symbol>();   // Detect dupilicate definition of attribute in one class
 
-  for (int i = classes->first(); classes->more(i); i = classes->next(i))
+  for (std::pair<Symbol, InheritanceGraphNode *> cur_pair : *Env::class_map)
   {
     method_set->clear();
     attr_set->clear();
 
-    Class_ curr_class = classes->nth(i);
-    if (!check_main_class && curr_class->getName() == Main)
+    Class_ cur_class = cur_pair.second->getClass();
+    if (!check_main_class && cur_class->getName() == Main)
       check_main_class = true;
-    Features features = curr_class->getFeatures();
+    Features features = cur_class->getFeatures();
     for (int j = features->first(); features->more(j); j = features->next(j))
     {
       if (features->nth(j)->isMethod())
@@ -371,7 +398,7 @@ int ClassTable::install_features(Classes classes)
         method_class *curr_method = static_cast<method_class *>(features->nth(j));
         if (method_set->find(curr_method->getName()) != method_set->end())
         {
-          semant_error(curr_class) << "Duplicate definition of method " << curr_method->getName() << "." << endl;
+          semant_error(cur_class) << "Duplicate definition of method " << curr_method->getName() << "." << endl;
           continue;
         }
         if (check_main_class && !check_main_method && curr_method->getName() == main_meth)
@@ -385,18 +412,18 @@ int ClassTable::install_features(Classes classes)
         // Insert return type
         arg_types->push_back(curr_method->getReturnType());
         // Insert into method_env
-        Env::method_map->insert(std::make_pair(std::make_pair(curr_class->getName(), curr_method->getName()), arg_types));
+        Env::method_map->insert(std::make_pair(std::make_pair(cur_class->getName(), curr_method->getName()), arg_types));
       }
       else
       {
         attr_class *curr_attr = static_cast<attr_class *>(features->nth(j));
         if (attr_set->find(curr_attr->getName()) != attr_set->end())
         {
-          semant_error(curr_class) << "Duplicate definition of attribute " << curr_attr->getName() << "." << endl;
+          semant_error(cur_class) << "Duplicate definition of attribute " << curr_attr->getName() << "." << endl;
           continue;
         }
         // Insert into object_env
-        Env::attr_map->insert(std::make_pair(std::make_pair(curr_class->getName(), curr_attr->getName()), curr_attr->getType()));
+        Env::attr_map->insert(std::make_pair(std::make_pair(cur_class->getName(), curr_attr->getName()), curr_attr->getType()));
       }
     }
   }
@@ -436,7 +463,7 @@ int ClassTable::setup_environment(Class_ cur_class)
   Env::method_env->enterscope();
   Env::cur_class = cur_class;
   // Traverse ancestors from root to current class, install features and check override
-  for (List<Class__class> *i = ancestors; i->tl(); i = i->tl())
+  for (List<Class__class> *i = ancestors; i; i = i->tl())
   {
     Class_ cur_ancestor = i->hd();
     for (int j = cur_ancestor->getFeatures()->first(); cur_ancestor->getFeatures()->more(j); j = cur_ancestor->getFeatures()->next(j))
@@ -478,7 +505,6 @@ int ClassTable::setup_environment(Class_ cur_class)
           continue;
         }
         Env::method_env->addid(curr_method->getName(), arg_types);
-        delete arg_types;
       }
       else
       {
@@ -507,6 +533,9 @@ bool ClassTable::check_subtype(Symbol type1, Symbol type2)
     return false;
   // Check existence of both types
   std::map<Symbol, InheritanceGraphNode *>::iterator it;
+
+  // std::cout << "\tcheck subtype for " << type1 << " and " << type2 << std::endl;
+
   if ((it = Env::class_map->find(type1)) == Env::class_map->end()) // Cannot find type1 in class_map
   {
     semant_error(Env::cur_class) << "Type " << type1 << " is undeclared." << endl;
@@ -532,6 +561,7 @@ bool ClassTable::check_subtype(Symbol type1, Symbol type2)
   return false;
 }
 
+// Return LCA type of a list of types
 Symbol ClassTable::get_LCA(std::vector<Symbol> *type_list)
 {
   if (type_list->size() == 1)
@@ -545,6 +575,7 @@ Symbol ClassTable::get_LCA(std::vector<Symbol> *type_list)
 // Return LCA type of type1 and type2
 Symbol ClassTable::get_LCA(Symbol type1, Symbol type2)
 {
+  // std:cout << "Get LCA of " << type1 << " and " << type2 << std::endl;
   if (type1 == No_type || type2 == No_type) // LCA of No_type and any type is No_type
     return No_type;
 
@@ -565,7 +596,7 @@ Symbol ClassTable::get_LCA(Symbol type1, Symbol type2)
   // Find LCA
   List<Class__class> *path1 = new List<Class__class>(it1->second->getClass(), (List<Class__class> *)NULL);
   // Generate a path from type1 to Object and check subtyping of type1 and type2 at the same time
-  for(InheritanceGraphNode *ptr = it1->second; ptr->getParent(); ptr = ptr->getParent())
+  for(InheritanceGraphNode *ptr = it1->second; ptr; ptr = ptr->getParent())
   {
     if (ptr == it2->second) // Indicate that *ptr is equal to or a subtype of type2
     {
@@ -575,7 +606,7 @@ Symbol ClassTable::get_LCA(Symbol type1, Symbol type2)
     path1 = new List<Class__class>(ptr->getClass(), path1);
   }
   List<Class__class> *path2 = new List<Class__class>(it2->second->getClass(), (List<Class__class> *)NULL);
-  for(InheritanceGraphNode *ptr = it2->second; ptr->getParent(); ptr = ptr->getParent())
+  for(InheritanceGraphNode *ptr = it2->second; ptr; ptr = ptr->getParent())
   {
     if (ptr == it1->second) // Indicate that *ptr is equal to or a subtype of type1
     {
@@ -592,6 +623,7 @@ Symbol ClassTable::get_LCA(Symbol type1, Symbol type2)
       delete path1, path2; // Need to delte from head of the List
       return result;
     }
+  semant_error(Env::cur_class) << "MESSAGE from ClassTable::get_LCA(): Don't know somehow create ERR_type." << endl;
   return ERR_type; // Actually, this line should never be reached
 }
 
@@ -635,6 +667,8 @@ void attr_class::type_check()
 
   if (init->get_type() == ERR_type)
     return; // If init is ERR_type, just return
+  
+  // std::cout << "\tattr: " << name << endl;
   if ((init->get_type() != No_type) && !ClassTable::check_subtype(attr_type, init->get_type()))
   {
     ClassTable::semant_error(Env::cur_class) << "Type " << init->get_type() << " is not equal to or a subtype of " << attr_type << endl;
@@ -647,6 +681,7 @@ void attr_class::type_check()
 
 void method_class::type_check()
 {
+  // std::cout << "Method: " << name << endl;
   // Assert all the methods have been installed into the method_map
   std::vector<Symbol> *arg_types = Env::method_map->find(std::make_pair(Env::cur_class->getName(), name))->second;
   
@@ -660,13 +695,27 @@ void method_class::type_check()
 
   if (expr->get_type() == ERR_type)
     return; // If expr is ERR_type, just return
-  if (!ClassTable::check_subtype(arg_types->back(), expr->get_type()))
-    ClassTable::semant_error(Env::cur_class) << "Type " << expr->get_type() << " is not equal to or a subtype of " << arg_types->back() << endl;
+  
+  Symbol return_type = (arg_types->back() == SELF_TYPE) ? Env::cur_class->getName() : arg_types->back();
+  if (!ClassTable::check_subtype(return_type, expr->get_type()))
+    ClassTable::semant_error(Env::cur_class) << "Type " << expr->get_type() << " is not equal to or a subtype of " << return_type << endl;
 }
 
 /////////////////////////////////////////////////////////////////
 // Start type-checking on all sub-classes of expression_class //
 ////////////////////////////////////////////////////////////////
+// Expression Expression_class::set_type(Symbol s)
+// {
+//   if (s == ERR_type)
+//   {
+//     std::cout << "ERROR! current class: " << Env::cur_class->getName() << endl;
+//     std::cout << "ERROR! current expression at " << this->get_line_number() << endl;
+//     exit(1);
+//   }
+//   type = s;
+//   return this;
+// }
+
 void object_class::type_check()
 {
   if (Symbol result = Env::object_env->lookup(name)) // check context in object identifier environment
@@ -680,6 +729,7 @@ void object_class::type_check()
 
 void assign_class::type_check()
 {
+  // std::cout << "\tassign to " << name << endl;
   Symbol id_type = Env::object_env->lookup(name);
   if (!id_type)
   {
@@ -758,6 +808,13 @@ void dispatch_class::type_check()
 
   // type_check of the dispatched method
   std::map<std::pair<Symbol, Symbol>, std::vector<Symbol> *>::iterator it = Env::method_map->find(std::make_pair(e0_type, name));
+  // Check ancestors if can't find method declaration in current class
+  Symbol temp = e0_type;
+  while (it == Env::method_map->end() && temp != Object)
+  {
+    temp = Env::class_map->at(temp)->getParent()->getName();
+    it = Env::method_map->find(std::make_pair(temp, name));
+  }
   if (it == Env::method_map->end())
   {
     ClassTable::semant_error(Env::cur_class) << "Undeclared method " << name << " in class " << e0_type << endl;
@@ -772,6 +829,8 @@ void dispatch_class::type_check()
     set_type(ERR_type);
     return;
   }
+
+  // std::cout << "\tdispatch: " << name << endl;
   for (int i = actual->first(); actual->more(i); i = actual->next(i))
   {
     Env::object_env->enterscope();
@@ -818,6 +877,7 @@ void static_dispatch_class::type_check()
     return;
   }
   // check subtyping of e0 and T
+  // std::cout << "\tstatic dispatch: " << name << endl;
   if (!ClassTable::check_subtype(T_type, e0_type))
   {
     ClassTable::semant_error(Env::cur_class) << "Type " << e0_type << " is not equal to or a subtype of " << T_type << endl;
@@ -930,9 +990,7 @@ void let_class::type_check()
     set_type(ERR_type);
     return;
   }
-  Symbol id_type;
-  if (type_decl == SELF_TYPE)
-    id_type = Env::cur_class->getName();
+  Symbol id_type = type_decl == SELF_TYPE ? Env::cur_class->getName() : type_decl;
   
   // do type-checking for init
   Env::object_env->enterscope();
@@ -947,6 +1005,7 @@ void let_class::type_check()
   }
   if (init_type != No_type) // in Let-No-Init, init is No_type, no need to check subtype
   {
+    // std::cout << "\tlet_class: " << identifier << endl;
     if (!ClassTable::check_subtype(id_type, init_type))
     {
       ClassTable::semant_error(Env::cur_class) << "Type " << init_type << " is not equal to or a subtype of " << id_type << endl;
@@ -1222,31 +1281,28 @@ void eq_class::type_check() {
   Env::object_env->enterscope();
   e1->type_check();
   Env::object_env->exitscope();
-  Symbol t = e1->get_type();
-  if (t != Int || t != Str || t != Bool)
-  {
-    ClassTable::semant_error(Env::cur_class) << "Expression of eq statement is not of type Int, Str or Bool";
-    set_type(ERR_type);
-    return;
-  }
 
   Env::object_env->enterscope();
   e2->type_check();
   Env::object_env->exitscope();
-  t = e2->get_type();
-  if (t != Int || t != Str || t != Bool)
+
+  Symbol t1 = e1->get_type();
+  Symbol t2 = e2->get_type();
+  if (t1 == ERR_type || t2 == ERR_type)
   {
-    ClassTable::semant_error(Env::cur_class) << "Expression of eq statement is not of type Int, Str or Bool";
     set_type(ERR_type);
     return;
   }
 
-  if (e1->get_type() != e2->get_type())
+  // If type1 and type2 belong to {Int, String, Bool}, then type1 and type2 must be the same type.
+  if ((t1 == Int || t1 == Str || t1 == Bool) && (t2 == Int || t2 == Str || t2 == Bool))
   {
-    if (e1->get_type() != ERR_type && e2->get_type() != ERR_type)
-      ClassTable::semant_error(Env::cur_class) << "Expressions of eq statement have different types";
-    set_type(ERR_type);
-    return;
+    if (t1 != t2)
+    {
+      ClassTable::semant_error(Env::cur_class) << "Expressions of EQ statement have different types" << endl;
+      set_type(ERR_type);
+      return;
+    }
   }
   set_type(Bool);
 }
@@ -1321,5 +1377,5 @@ void program_class::semant()
     exit(1);
   }
   
-  std::cout << "All semanteme have past checking!\nREADY TO GO!\n\nSyntax tree:\n";
+  std::cout << "All semanteme have past checking!\nREADY TO GO!\n------------------\nSyntax tree:\n";
 }
